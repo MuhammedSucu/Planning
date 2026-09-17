@@ -231,11 +231,6 @@
     <div class="month-grid" id="month-grid"></div>
   </div>
 
-  <section class="courses">
-    <h2>Cours de la période affichée</h2>
-    <div class="course-list" id="course-list"></div>
-  </section>
-
   <div class="hint">Cette page est hébergée en ligne : elle fonctionne depuis n'importe quel appareil avec internet. Partagez son lien avec le professeur — il verra les profils des enfants et pourra y ajouter des cours. Il n'y a pas de mot de passe : quiconque a le lien peut voir et modifier tous les profils.</div>
 
 </div>
@@ -433,7 +428,6 @@ function renderAll(){
   document.getElementById("week-view").style.display = viewMode === "week" ? "" : "none";
   document.getElementById("month-view").style.display = viewMode === "month" ? "" : "none";
   if(viewMode === "week") renderWeekGrid(); else renderMonthGrid();
-  renderCourseList();
 }
 
 function renderWeekGrid(){
