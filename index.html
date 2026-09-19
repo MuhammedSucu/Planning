@@ -171,6 +171,7 @@
   }
   .legend-delete:hover{color:var(--coral);}
   .swatch{width:12px;height:12px;border-radius:3px;display:inline-block;}
+  .swatch[data-cat]{cursor:pointer;}
 
   .grid-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;max-height:640px;overflow-y:auto;}
   table{border-collapse:collapse;width:100%;min-width:640px;table-layout:fixed;}
@@ -649,7 +650,7 @@ function renderLegend(){
   const legend = document.getElementById("legend");
   let html = "";
   categories.forEach(c => {
-    html += "<span><span class='swatch' style='background:"+c.bg+";border:1px solid "+c.text+";'></span>"+escapeHtml(c.name)+
+    html += "<span><span class='swatch' data-cat='"+escapeHtml(c.name)+"' style='background:"+c.bg+";border:1px solid "+c.text+";' title='Changer la couleur'></span>"+escapeHtml(c.name)+
       "<button class='legend-delete' data-cat='"+escapeHtml(c.name)+"' title='Supprimer cette catégorie'>×</button></span>";
   });
   html += "<span><span class='swatch' style='background:#fff;border:1px solid var(--line);'></span>Libre</span>";
@@ -658,6 +659,36 @@ function renderLegend(){
   legend.querySelectorAll(".legend-delete").forEach(btn => {
     btn.addEventListener("click", () => deleteCategory(btn.dataset.cat));
   });
+  legend.querySelectorAll(".swatch[data-cat]").forEach(sw => {
+    sw.addEventListener("click", () => openColorPicker(sw.dataset.cat));
+  });
+}
+
+function lighten(hex, amount){
+  hex = hex.replace("#","");
+  const r = parseInt(hex.substring(0,2),16), g = parseInt(hex.substring(2,4),16), b = parseInt(hex.substring(4,6),16);
+  const nr = Math.round(r + (255-r)*amount), ng = Math.round(g + (255-g)*amount), nb = Math.round(b + (255-b)*amount);
+  return "#" + [nr,ng,nb].map(x => x.toString(16).padStart(2,"0")).join("");
+}
+
+function openColorPicker(name){
+  const cat = categories.find(c => c.name === name);
+  if(!cat) return;
+  const input = document.createElement("input");
+  input.type = "color";
+  input.value = cat.text;
+  input.style.position = "fixed";
+  input.style.left = "-100px";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.addEventListener("input", async () => {
+    cat.text = input.value;
+    cat.bg = lighten(input.value, 0.82);
+    await saveData();
+    renderAll();
+  });
+  input.addEventListener("change", () => { if(input.parentNode) document.body.removeChild(input); });
+  input.click();
 }
 
 async function deleteCategory(name){
