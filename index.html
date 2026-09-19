@@ -213,6 +213,7 @@
   td.slot.booked:hover{filter:brightness(0.94);}
   .cell-label{
     display:flex;
+    flex-direction:column;
     align-items:center;
     justify-content:center;
     height:100%;
@@ -223,6 +224,13 @@
     padding:4px;
     text-align:center;
     word-break:break-word;
+  }
+  .cell-time{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:9.5px;
+    font-weight:500;
+    opacity:0.75;
+    margin-top:2px;
   }
 
   /* Month view */
@@ -758,7 +766,7 @@ function renderWeekGrid(){
         const span = (ev.end - ev.start) / SLOT_MINUTES;
         const cat = getCategory(ev.category);
         html += "<td rowspan='"+span+"' class='slot booked' style='background:"+cat.bg+";' data-date='"+dateISO+"' data-start='"+startMin+"'>" +
-          "<div class='cell-label' style='color:"+cat.text+";'>"+escapeHtml(cat.name)+"</div></td>";
+          "<div class='cell-label' style='color:"+cat.text+";'>"+escapeHtml(cat.name)+"<span class='cell-time'>"+fmt(ev.start)+"–"+fmt(ev.end)+"</span></div></td>";
       } else if(!ev){
         html += "<td class='slot' data-date='"+dateISO+"' data-start='"+startMin+"'></td>";
       }
