@@ -465,7 +465,7 @@ const DAY_NAMES = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const START_HOUR = 8;
 const END_HOUR = 21;
 const SLOT_MINUTES = 30;
-const PROFILE_PREF_KEY = "planning-selected-profile";
+const PROFILE_PREF_KEY = "planning-selected-profile-public";
 const ADD_CATEGORY_VALUE = "__add__";
 const DEFAULT_PROFILES = ["Moi", "Enfant 1"];
 
@@ -560,7 +560,7 @@ async function initStorage(){
   if(!firebaseConfigured()){
     document.getElementById("setup-banner").classList.remove("hidden");
     events = []; categories = DEFAULT_CATEGORIES.slice(); profiles = DEFAULT_PROFILES.slice();
-    currentProfile = localStorage.getItem(PROFILE_PREF_KEY) || profiles[0];
+    currentProfile = profiles.find(p => !HIDDEN_PROFILES.includes(p)) || profiles[0];
     return;
   }
   document.getElementById("setup-banner").classList.add("hidden");
@@ -578,8 +578,9 @@ async function initStorage(){
     events = []; categories = DEFAULT_CATEGORIES.slice(); profiles = DEFAULT_PROFILES.slice();
     await docRef.set({ events, categories, profiles });
   }
-  currentProfile = localStorage.getItem(PROFILE_PREF_KEY) || profiles[0];
-  if(!profiles.includes(currentProfile)) currentProfile = profiles[0];
+  const visibleProfiles = profiles.filter(p => !HIDDEN_PROFILES.includes(p));
+  const saved = localStorage.getItem(PROFILE_PREF_KEY);
+  currentProfile = (saved && visibleProfiles.includes(saved)) ? saved : visibleProfiles[0];
 
   docRef.onSnapshot(s => {
     if(!s.exists) return;
@@ -616,9 +617,12 @@ async function addProfile(name){
   return trimmed;
 }
 
+const HIDDEN_PROFILES = ["Moi"];
+
 function renderProfileBar(){
   const bar = document.getElementById("profile-bar");
-  let html = profiles.map(p =>
+  const visibleProfiles = profiles.filter(p => !HIDDEN_PROFILES.includes(p));
+  let html = visibleProfiles.map(p =>
     "<button class='profile-tab "+(p===currentProfile?"active":"")+"' data-profile='"+escapeHtml(p)+"'>"+escapeHtml(p)+"</button>"
   ).join("");
   html += "<button class='profile-tab add-tab' id='add-profile-btn'>+ Ajouter</button>";
