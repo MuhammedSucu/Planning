@@ -574,9 +574,15 @@ async function initStorage(){
     events = data.events || [];
     categories = (data.categories && data.categories.length) ? data.categories : DEFAULT_CATEGORIES.slice();
     profiles = (data.profiles && data.profiles.length) ? data.profiles : DEFAULT_PROFILES.slice();
+    if(!data.migratedMoiToEnfant1){
+      events.forEach(e => { if(e.profile === "Moi") e.profile = "Enfant 1"; });
+      if(!profiles.includes("Enfant 1")) profiles.push("Enfant 1");
+      if(!profiles.includes("Moi")) profiles.push("Moi");
+      await saveData();
+    }
   } else {
     events = []; categories = DEFAULT_CATEGORIES.slice(); profiles = DEFAULT_PROFILES.slice();
-    await docRef.set({ events, categories, profiles });
+    await saveData();
   }
   const visibleProfiles = profiles.filter(p => !HIDDEN_PROFILES.includes(p));
   const saved = localStorage.getItem(PROFILE_PREF_KEY);
@@ -595,7 +601,7 @@ async function initStorage(){
 async function saveData(){
   if(!docRef) return;
   try{
-    await docRef.set({ events, categories, profiles });
+    await docRef.set({ events, categories, profiles, migratedMoiToEnfant1: true });
   }catch(e){
     console.error("Erreur de sauvegarde", e);
   }
