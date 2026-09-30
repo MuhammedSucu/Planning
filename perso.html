@@ -68,6 +68,16 @@
     flex-wrap:wrap;
     margin-bottom:16px;
   }
+  .overlay-bar{margin-bottom:16px;}
+  .overlay-label{font-size:13px;color:#6b6862;display:flex;align-items:center;gap:8px;}
+  .overlay-label select{
+    font-family:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);
+  }
+  td.slot.ghost{background:#EDEBE4;}
+  .cell-ghost{
+    font-size:9.5px;font-weight:600;color:#9c988e;text-align:center;line-height:1.2;
+    display:flex;align-items:center;justify-content:center;height:100%;width:100%;pointer-events:none;
+  }
   .profile-tab{
     border:1px solid var(--line);
     background:#fff;
@@ -426,6 +436,7 @@
   </header>
 
   <div class="profile-bar" id="profile-bar"></div>
+  <div class="overlay-bar" id="overlay-bar"></div>
 
   <div class="toolbar">
     <div class="view-toggle">
@@ -622,6 +633,19 @@ async function addProfile(name){
   return trimmed;
 }
 
+function overlayKey(){ return "overlay-for-" + currentProfile; }
+function getOverlayProfile(){
+  const saved = localStorage.getItem(overlayKey());
+  if(saved === "none") return null;
+  if(saved && profiles.includes(saved) && saved !== currentProfile) return saved;
+  if(saved === null && currentProfile === "Moi" && profiles.includes("Enfant 1")) return "Enfant 1";
+  return null;
+}
+function setOverlayProfile(name){
+  localStorage.setItem(overlayKey(), name || "none");
+  renderAll();
+}
+
 function renderProfileBar(){
   const bar = document.getElementById("profile-bar");
   let html = profiles.map(p =>
@@ -640,6 +664,19 @@ function renderProfileBar(){
       await setProfile(p);
     }
   });
+
+  const others = profiles.filter(p => p !== currentProfile);
+  const overlayBar = document.getElementById("overlay-bar");
+  if(others.length === 0){
+    overlayBar.innerHTML = "";
+    return;
+  }
+  const current = getOverlayProfile();
+  overlayBar.innerHTML = "<label class='overlay-label'>Afficher en fond : <select id='overlay-select'>" +
+    "<option value='none'"+(!current?" selected":"")+">Aucun</option>" +
+    others.map(p => "<option value='"+escapeHtml(p)+"'"+(p===current?" selected":"")+">"+escapeHtml(p)+"</option>").join("") +
+    "</select></label>";
+  document.getElementById("overlay-select").addEventListener("change", (e) => setOverlayProfile(e.target.value));
 }
 
 async function addCategory(name){
@@ -745,8 +782,10 @@ function renderWeekGrid(){
   const today = new Date(); today.setHours(0,0,0,0);
 
   const table = document.getElementById("grid");
+  const overlayProfile = getOverlayProfile();
   const skip = {};
   events.forEach(ev => {
+    if(ev.profile !== currentProfile) return;
     const firstIdx = SLOT_STARTS.indexOf(ev.start);
     if(firstIdx === -1) return;
     const span = (ev.end - ev.start) / SLOT_MINUTES;
@@ -775,7 +814,16 @@ function renderWeekGrid(){
         html += "<td rowspan='"+span+"' class='slot booked' style='background:"+cat.bg+";' data-date='"+dateISO+"' data-start='"+startMin+"'>" +
           "<div class='cell-label'>"+escapeHtml(cat.name)+"<span class='cell-time'>"+fmt(ev.start)+"–"+fmt(ev.end)+"</span></div></td>";
       } else if(!ev){
-        html += "<td class='slot' data-date='"+dateISO+"' data-start='"+startMin+"'></td>";
+        let ghostHtml = "", ghostClass = "";
+        if(overlayProfile){
+          const ghostEv = events.find(e => e.profile === overlayProfile && e.date === dateISO && startMin >= e.start && startMin < e.end);
+          if(ghostEv){
+            const gcat = getCategory(ghostEv.category);
+            ghostClass = " ghost";
+            ghostHtml = "<div class='cell-ghost'>"+escapeHtml(gcat.name)+"</div>";
+          }
+        }
+        html += "<td class='slot"+ghostClass+"' data-date='"+dateISO+"' data-start='"+startMin+"'>"+ghostHtml+"</td>";
       }
     });
     html += "</tr>";
