@@ -775,7 +775,7 @@ function openHolidaysModal(){
     const endDate = document.getElementById("holiday-end").value;
     if(!startDate || !endDate){ alert("Choisissez une date de début et de fin."); return; }
     if(endDate < startDate){ alert("La date de fin doit être après la date de début."); return; }
-    holidays.push({ id:newId(), label, startDate, endDate });
+    holidays.push({ id: Date.now() + "-" + Math.random().toString(36).slice(2,7), label, startDate, endDate });
     await saveData();
     closeOverlay();
     renderAll();
