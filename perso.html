@@ -272,6 +272,8 @@
     gap:3px;
   }
   .month-daycell.outside{background:var(--paper-dim);}
+  .month-daycell.holiday{background:#FBEFDF;}
+  .month-daycell.holiday.outside{background:#F3E6D2;}
   .month-daycell:hover{background:#F5F3EC;}
   .month-daynum{
     font-family:'IBM Plex Mono',monospace;
@@ -420,6 +422,22 @@
   .btn-secondary{background:var(--paper-dim);color:var(--ink);}
   .btn-danger{background:var(--coral-soft);color:var(--coral);}
   .course-note-view{font-size:14px;color:#4a4842;margin-bottom:6px;}
+  th.holiday-col{background:#E8A15C !important;}
+  td.slot.holiday{background:#FBEFDF;}
+  .holiday-banner-row th{padding:2px 4px;height:16px;box-sizing:border-box;}
+  .holiday-banner{
+    font-size:9px;font-weight:700;color:#8a5a1f;background:#FBEFDF !important;
+    text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .holiday-banner-empty{background:var(--paper) !important;}
+  .holiday-row{
+    display:flex;justify-content:space-between;align-items:center;
+    font-size:13px;padding:6px 0;border-bottom:1px solid var(--line);
+  }
+  .holiday-row:last-child{border-bottom:none;}
+  .holiday-dates{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a867d;}
+  .btn-holiday-delete{border:none;background:transparent;color:#b0aca2;font-size:15px;cursor:pointer;padding:0 4px;}
+  .btn-holiday-delete:hover{color:var(--coral);}
 </style>
 </head>
 <body>
@@ -448,6 +466,7 @@
       <div class="period-label" id="period-label"></div>
       <button id="nav-next">›</button>
       <button class="today-btn" id="nav-today">Aujourd'hui</button>
+      <button class="today-btn" id="manage-holidays-btn">🌴 Vacances</button>
     </div>
   </div>
 
@@ -497,6 +516,7 @@ const DEFAULT_CATEGORIES = ["Anglais","Arabe","École","Vacances"].map((name, i)
 let events = [];
 let categories = [];
 let profiles = [];
+let holidays = [];
 let currentProfile = null;
 let viewMode = "week"; // "week" | "month"
 let currentDate = new Date();
@@ -553,6 +573,9 @@ function rangeLabel(dateISO, start, end){
 function getCategory(name){
   return categories.find(c => c.name === name) || {name, bg:"#EDEBE4", text:"#6b6862"};
 }
+function holidayFor(dateISO){
+  return holidays.find(h => dateISO >= h.startDate && dateISO <= h.endDate);
+}
 
 /* ---------- Firebase (stockage en ligne, gratuit) ---------- */
 const firebaseConfig = {
@@ -585,6 +608,7 @@ async function initStorage(){
     events = data.events || [];
     categories = (data.categories && data.categories.length) ? data.categories : DEFAULT_CATEGORIES.slice();
     profiles = (data.profiles && data.profiles.length) ? data.profiles : DEFAULT_PROFILES.slice();
+    holidays = data.holidays || [];
     if(!data.migratedMoiToEnfant1){
       events.forEach(e => { if(e.profile === "Moi") e.profile = "Enfant 1"; });
       if(!profiles.includes("Enfant 1")) profiles.push("Enfant 1");
@@ -592,7 +616,7 @@ async function initStorage(){
       await saveData();
     }
   } else {
-    events = []; categories = DEFAULT_CATEGORIES.slice(); profiles = DEFAULT_PROFILES.slice();
+    events = []; categories = DEFAULT_CATEGORIES.slice(); profiles = DEFAULT_PROFILES.slice(); holidays = [];
     await saveData();
   }
   currentProfile = localStorage.getItem(PROFILE_PREF_KEY) || profiles[0];
@@ -604,6 +628,7 @@ async function initStorage(){
     events = data.events || [];
     categories = (data.categories && data.categories.length) ? data.categories : categories;
     profiles = (data.profiles && data.profiles.length) ? data.profiles : profiles;
+    holidays = data.holidays || [];
     renderAll();
   });
 }
@@ -611,7 +636,7 @@ async function initStorage(){
 async function saveData(){
   if(!docRef) return;
   try{
-    await docRef.set({ events, categories, profiles, migratedMoiToEnfant1: true });
+    await docRef.set({ events, categories, profiles, holidays, migratedMoiToEnfant1: true });
   }catch(e){
     console.error("Erreur de sauvegarde", e);
   }
@@ -754,6 +779,51 @@ async function deleteCategory(name){
   renderAll();
 }
 
+function openHolidaysModal(){
+  const sorted = [...holidays].sort((a,b) => a.startDate < b.startDate ? -1 : 1);
+  const listHtml = sorted.length === 0
+    ? "<p style='font-size:13px;color:#9c988e;'>Aucune période de vacances enregistrée.</p>"
+    : sorted.map(h => "<div class='holiday-row' data-id='"+h.id+"'>" +
+        "<span>"+escapeHtml(h.label)+" <span class='holiday-dates'>("+h.startDate+" → "+h.endDate+")</span></span>" +
+        "<button class='btn-holiday-delete' data-id='"+h.id+"'>×</button></div>").join("");
+
+  openOverlay(
+    "<h3>Vacances scolaires</h3>" +
+    "<div class='field'><label>Nom (ex. Vacances de la Toussaint)</label><input type='text' id='holiday-label' placeholder='Vacances de...'></div>" +
+    "<div class='row-2'>" +
+      "<div class='field'><label>Du</label><input type='date' id='holiday-start'></div>" +
+      "<div class='field'><label>Au</label><input type='date' id='holiday-end'></div>" +
+    "</div>" +
+    "<div class='modal-actions'><button class='btn btn-primary' id='add-holiday-btn'>Ajouter</button></div>" +
+    "<div style='margin-top:18px;border-top:1px solid var(--line);padding-top:14px;'>" +
+      "<div style='font-size:12.5px;font-weight:600;color:#4a4842;margin-bottom:8px;'>Périodes enregistrées</div>" +
+      "<div id='holiday-list'>"+listHtml+"</div>" +
+    "</div>" +
+    "<div class='modal-actions'><button class='btn btn-secondary push-left' onclick='closeOverlay()'>Fermer</button></div>"
+  );
+
+  document.getElementById("add-holiday-btn").addEventListener("click", async () => {
+    const label = document.getElementById("holiday-label").value.trim() || "Vacances";
+    const startDate = document.getElementById("holiday-start").value;
+    const endDate = document.getElementById("holiday-end").value;
+    if(!startDate || !endDate){ alert("Choisissez une date de début et de fin."); return; }
+    if(endDate < startDate){ alert("La date de fin doit être après la date de début."); return; }
+    holidays.push({ id: Date.now() + "-" + Math.random().toString(36).slice(2,7), label, startDate, endDate });
+    await saveData();
+    closeOverlay();
+    renderAll();
+  });
+
+  document.querySelectorAll(".btn-holiday-delete").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      holidays = holidays.filter(h => h.id !== btn.dataset.id);
+      await saveData();
+      closeOverlay();
+      renderAll();
+    });
+  });
+}
+
 function updateToolbar(){
   document.getElementById("btn-week").classList.toggle("active", viewMode === "week");
   document.getElementById("btn-month").classList.toggle("active", viewMode === "month");
@@ -797,9 +867,31 @@ function renderWeekGrid(){
   let html = "<thead><tr><th></th>";
   weekDates.forEach(d => {
     const isToday = isSameDay(d, today);
-    html += "<th class='"+(isToday?"today-col":"")+"'>"+DAY_NAMES[(d.getDay()+6)%7]+" "+d.getDate()+"</th>";
+    const h = holidayFor(isoDate(d));
+    html += "<th class='"+(isToday?"today-col":"")+(h?" holiday-col":"")+"'"+(h?" title='"+escapeHtml(h.label)+"'":"")+">"+DAY_NAMES[(d.getDay()+6)%7]+" "+d.getDate()+"</th>";
   });
-  html += "</tr></thead><tbody>";
+  html += "</tr>";
+
+  if(weekDates.some(d => holidayFor(isoDate(d)))){
+    html += "<tr class='holiday-banner-row'><th></th>";
+    let i = 0;
+    while(i < weekDates.length){
+      const dISO = isoDate(weekDates[i]);
+      const h = holidayFor(dISO);
+      if(!h){ html += "<th class='holiday-banner-empty'></th>"; i++; continue; }
+      let span = 1;
+      while(i+span < weekDates.length){
+        const nh = holidayFor(isoDate(weekDates[i+span]));
+        if(!nh || nh.id !== h.id) break;
+        span++;
+      }
+      html += "<th colspan='"+span+"' class='holiday-banner'>"+escapeHtml(h.label)+"</th>";
+      i += span;
+    }
+    html += "</tr>";
+  }
+
+  html += "</thead><tbody>";
 
   SLOT_STARTS.forEach((startMin, rowIdx) => {
     const isHourStart = startMin % 60 === 0;
@@ -814,12 +906,13 @@ function renderWeekGrid(){
         html += "<td rowspan='"+span+"' class='slot booked' style='background:"+cat.bg+";' data-date='"+dateISO+"' data-start='"+startMin+"'>" +
           "<div class='cell-label'>"+escapeHtml(cat.name)+"<span class='cell-time'>"+fmt(ev.start)+"–"+fmt(ev.end)+"</span></div></td>";
       } else if(!ev){
-        let ghostHtml = "", ghostClass = "";
+        const hol = holidayFor(dateISO);
+        let ghostHtml = "", ghostClass = hol ? " holiday" : "";
         if(overlayProfile){
           const ghostEv = events.find(e => e.profile === overlayProfile && e.date === dateISO && startMin >= e.start && startMin < e.end);
           if(ghostEv){
             const gcat = getCategory(ghostEv.category);
-            ghostClass = " ghost";
+            ghostClass += " ghost";
             ghostHtml = "<div class='cell-ghost'>"+escapeHtml(gcat.name)+"</div>";
           }
         }
@@ -862,7 +955,8 @@ function renderMonthGrid(){
       chips += "<div class='month-more'>+"+(dayEvents.length-3)+" autre(s)</div>";
     }
 
-    html += "<div class='month-daycell "+(outside?"outside":"")+"' data-date='"+dateISO+"'>" +
+    const hol = holidayFor(dateISO);
+    html += "<div class='month-daycell "+(outside?"outside":"")+(hol?" holiday":"")+"' data-date='"+dateISO+"'"+(hol?" title='"+escapeHtml(hol.label)+"'":"")+">" +
       "<div class='month-daynum "+(isToday?"today":"")+"'>"+d.getDate()+"</div>" +
       chips +
       "</div>";
@@ -1144,6 +1238,7 @@ document.getElementById("nav-today").addEventListener("click", () => {
   currentDate = new Date(); currentDate.setHours(0,0,0,0);
   renderAll();
 });
+document.getElementById("manage-holidays-btn").addEventListener("click", () => openHolidaysModal());
 
 (async function init(){
   await initStorage();
