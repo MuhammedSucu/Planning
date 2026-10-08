@@ -236,6 +236,11 @@
     word-break:break-word;
     color:var(--ink);
   }
+  td.slot.cancelled{background-image:repeating-linear-gradient(45deg, rgba(0,0,0,0.07) 0 6px, transparent 6px 12px);}
+  td.slot.cancelled .cell-name{text-decoration:line-through;opacity:.65;}
+  .cancel-x{font-size:20px;line-height:1;font-weight:700;color:var(--coral);}
+  .cancel-tag{font-size:9px;font-weight:700;color:var(--coral);margin-top:2px;letter-spacing:.03em;text-transform:uppercase;}
+  .month-chip.cancelled{text-decoration:line-through;opacity:.6;}
   .cell-time{
     font-family:'IBM Plex Mono',monospace;
     font-size:9.5px;
@@ -903,13 +908,14 @@ function renderWeekGrid(){
       if(ev && ev.start === startMin){
         const span = (ev.end - ev.start) / SLOT_MINUTES;
         const cat = getCategory(ev.category);
-        html += "<td rowspan='"+span+"' class='slot booked' style='background:"+cat.bg+";' data-date='"+dateISO+"' data-start='"+startMin+"'>" +
-          "<div class='cell-label'>"+escapeHtml(cat.name)+"<span class='cell-time'>"+fmt(ev.start)+"–"+fmt(ev.end)+"</span></div></td>";
+        const isCancelled = !!ev.cancelled;
+        html += "<td rowspan='"+span+"' class='slot booked"+(isCancelled?" cancelled":"")+"' style='background:"+cat.bg+";' data-date='"+dateISO+"' data-start='"+startMin+"'>" +
+          "<div class='cell-label'>"+(isCancelled?"<span class='cancel-x'>✕</span>":"")+"<span class='cell-name'>"+escapeHtml(cat.name)+"</span><span class='cell-time'>"+fmt(ev.start)+"–"+fmt(ev.end)+"</span>"+(isCancelled?"<span class='cancel-tag'>Annulé</span>":"")+"</div></td>";
       } else if(!ev){
         const hol = holidayFor(dateISO);
         let ghostHtml = "", ghostClass = hol ? " holiday" : "";
         if(overlayProfile){
-          const ghostEv = events.find(e => e.profile === overlayProfile && e.date === dateISO && startMin >= e.start && startMin < e.end);
+          const ghostEv = events.find(e => e.profile === overlayProfile && !e.cancelled && e.date === dateISO && startMin >= e.start && startMin < e.end);
           if(ghostEv){
             const gcat = getCategory(ghostEv.category);
             ghostClass += " ghost";
@@ -949,7 +955,7 @@ function renderMonthGrid(){
     let chips = "";
     dayEvents.slice(0,3).forEach(ev => {
       const cat = getCategory(ev.category);
-      chips += "<div class='month-chip' data-id='"+ev.id+"' style='background:"+cat.bg+";color:"+cat.text+";'>"+fmt(ev.start)+" "+escapeHtml(cat.name)+"</div>";
+      chips += "<div class='month-chip"+(ev.cancelled?" cancelled":"")+"' data-id='"+ev.id+"' style='background:"+cat.bg+";color:"+cat.text+";'>"+(ev.cancelled?"✕ ":"")+fmt(ev.start)+" "+escapeHtml(cat.name)+"</div>";
     });
     if(dayEvents.length > 3){
       chips += "<div class='month-more'>+"+(dayEvents.length-3)+" autre(s)</div>";
@@ -1182,9 +1188,11 @@ function openReadonlyModal(ev){
   openOverlay(
     "<h3 style='margin-bottom:2px;color:"+cat.text+";'>"+escapeHtml(cat.name)+"</h3>" +
     "<div class='modal-when'>"+rangeLabel(ev.date, ev.start, ev.end)+(isSeries ? " · récurrent" : "")+"</div>" +
+    (ev.cancelled ? "<div class='course-note-view' style='color:var(--coral);font-weight:700;'>✕ Cours annulé</div>" : "") +
     (ev.note ? "<div class='course-note-view'>"+escapeHtml(ev.note)+"</div>" : "") +
     "<div class='modal-actions'>" +
       "<button class='btn btn-secondary push-left' id='edit-booking'>Modifier</button>" +
+      "<button class='btn btn-secondary' id='cancel-booking'>"+(ev.cancelled ? "Rétablir le cours" : "Annuler le cours")+"</button>" +
       (isSeries
         ? "<button class='btn btn-danger' id='delete-one'>Supprimer ce jour</button><button class='btn btn-danger' id='delete-series'>Supprimer la série</button>"
         : "<button class='btn btn-danger' id='delete-booking'>Supprimer</button>") +
@@ -1193,6 +1201,13 @@ function openReadonlyModal(ev){
 
   document.getElementById("edit-booking").addEventListener("click", () => {
     openBookingForm(ev, ev.date, ev.start, ev.end);
+  });
+
+  document.getElementById("cancel-booking").addEventListener("click", async () => {
+    if(ev.cancelled){ delete ev.cancelled; } else { ev.cancelled = true; }
+    await saveData();
+    closeOverlay();
+    renderAll();
   });
 
   if(isSeries){
