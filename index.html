@@ -32,6 +32,7 @@
   /* ================= Coque ================= */
   .shell{display:flex;min-height:100vh;}
   .side{width:248px;flex-shrink:0;background:var(--side);border-right:1px solid var(--line);padding:18px 14px;display:flex;flex-direction:column;gap:20px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  .side > *{flex-shrink:0;}
   .content{flex:1;min-width:0;padding:18px 22px 22px;display:flex;flex-direction:column;gap:14px;}
 
   .brand{display:flex;align-items:center;gap:10px;padding:0 2px;}
@@ -336,6 +337,39 @@
   .ed-hint{font-size:12px;color:var(--faint);margin-right:auto;}
   .icon-btn.danger:hover{color:var(--danger);background:var(--danger-soft);}
 
+  /* Heures de prière */
+  :root{ --prayer:#0E8577; --prayer-soft:#E3F5F2; }
+  .pr-line{position:absolute;left:0;right:0;height:0;border-top:1.5px dashed color-mix(in srgb,var(--prayer) 65%,transparent);z-index:1;pointer-events:none;}
+  .pr-line span{position:absolute;right:3px;top:-8px;font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--prayer);background:var(--surface);padding:0 4px;border-radius:4px;line-height:15px;white-space:nowrap;box-shadow:0 0 0 1px var(--prayer-soft);}
+  .pr-line.pr-sun{border-top-style:dotted;opacity:.55;}
+  .tg-day{flex-wrap:wrap;}
+  .pr-outs{flex-basis:100%;display:flex;gap:4px;flex-wrap:wrap;}
+  .pr-out{font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--prayer);background:var(--prayer-soft);border-radius:4px;padding:0 5px;line-height:16px;white-space:nowrap;}
+  .pr-h{display:flex;justify-content:space-between;align-items:center;}
+  .tgl-sm{transform:scale(.85);transform-origin:right center;}
+  .tgl-sm:checked{background:var(--prayer);}
+  .pr-cities{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:0 2px;}
+  .pr-city{border:1px solid var(--line-2);background:var(--surface);border-radius:7px;padding:6px 6px;font-size:12.5px;font-weight:500;color:var(--muted);}
+  .pr-city:hover{color:var(--ink);}
+  .pr-city.on{background:var(--prayer-soft);border-color:var(--prayer);color:var(--prayer);font-weight:600;}
+  .pr-today{margin-top:8px;padding:8px 10px;border-radius:9px;background:var(--surface);box-shadow:0 0 0 1px var(--line);}
+  .pr-sub{font-size:11px;color:var(--faint);margin-bottom:4px;}
+  .pr-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px 10px;}
+  .pr-row{display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:var(--muted);}
+  .pr-row b{font-family:var(--mono);font-weight:500;color:var(--ink);font-size:11.5px;}
+  .pr-row.sun{opacity:.6;}
+  .pr-row.next{color:var(--prayer);font-weight:600;}
+  .pr-row.next b{color:var(--prayer);font-weight:700;}
+  .pr-links{display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:12px;}
+  .pr-links a{color:var(--prayer);text-decoration:none;font-weight:500;display:inline-flex;gap:3px;align-items:center;}
+  .ps-city{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:8px;}
+  .ps-city summary{cursor:pointer;font-weight:600;font-size:14px;padding:2px 0;}
+  .ps-city summary small{font-weight:400;color:var(--faint);margin-left:6px;}
+  .ps-city[open] summary{margin-bottom:10px;}
+  .ps-adj{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+  .ps-adj label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted);margin:0;}
+  .ps-adj input{padding:6px 8px !important;font-size:13px !important;}
+
   /* Connexion par mot de passe */
   .pwd{position:relative;display:flex;flex:1;min-width:0;}
   .pwd input{width:100%;padding-right:40px !important;}
@@ -400,7 +434,7 @@
   @media (max-width:900px){
     .shell{flex-direction:column;}
     .side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--line);padding:12px 12px 10px;gap:12px;flex-direction:row;flex-wrap:wrap;align-items:center;}
-    .side .mini-wrap,.side .side-h,.side .avatars-wrap,.side .new-btn kbd{display:none;}
+    .side .pr-today,.side .mini-wrap,.side .side-h:not(.pr-h),.side .avatars-wrap,.side .new-btn kbd{display:none;}
     .brand{flex:1;}
     .new-btn{height:36px;order:2;}
     .side-sec{flex-direction:row;flex-wrap:wrap;gap:4px;width:100%;order:3;}
@@ -523,6 +557,127 @@ const TIME_OPTS = []; for(let m = START_HOUR*60; m <= END_HOUR*60; m += STEP) TI
 const timeOpts = (sel, from=0) => TIME_OPTS.filter(m => m >= from).map(m => `<option value="${m}" ${m===sel?"selected":""}>${fmt(m)}</option>`).join("");
 /* Couleurs d'un créneau : fond clair, texte foncé, liseré vif */
 const paintVars = c => `--evbg:${c.bg || lighten(c.text, .88)};--evfg:${darken(c.text || GREY.text, .4)};--evbar:${c.text || GREY.text};`;
+
+/* =====================================================================
+   HEURES DE PRIÈRE — calcul astronomique local (aucun service externe)
+   ===================================================================== */
+const PRAYER_CITIES = {
+  dubai:    {name:"Dubaï",    lat:25.2048, lng:55.2708, tz:"Asia/Dubai",     method:"dubai"},
+  istanbul: {name:"Istanbul", lat:41.0082, lng:28.9784, tz:"Europe/Istanbul", method:"diyanet"},
+  mulhouse: {name:"Mulhouse", lat:47.7508, lng:7.3359,  tz:"Europe/Paris",    method:"uoif"},
+  paris:    {name:"Paris",    lat:48.8566, lng:2.3522,  tz:"Europe/Paris",    method:"uoif"}
+};
+/* Angles du soleil sous l'horizon pour Fajr / Isha, et corrections officielles (minutes) */
+const PRAYER_METHODS = {
+  dubai:   {name:"Dubaï (Awqaf, 18,2°)",        fajr:18.2, isha:18.2, adj:{}},
+  diyanet: {name:"Diyanet (Turquie)",            fajr:18,   isha:17,   adj:{sunrise:-7, dhuhr:5, asr:4, maghrib:7}},
+  uoif:    {name:"UOIF (France, 12°)",           fajr:12,   isha:12,   adj:{}},
+  mwl:     {name:"Ligue islamique mondiale (18°/17°)", fajr:18, isha:17, adj:{}},
+  ummalqura:{name:"Umm al-Qura (La Mecque)",     fajr:18.5, ishaMin:90, adj:{}}
+};
+const PRAYER_NAMES = [["fajr","Fajr"],["sunrise","Lever"],["dhuhr","Dhuhr"],["asr","Asr"],["maghrib","Maghrib"],["isha","Isha"]];
+
+const PrayerCalc = (() => {
+  const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+  const fix = (a, b) => { a = a - b * Math.floor(a / b); return a < 0 ? a + b : a; };
+  const dsin = d => Math.sin(rad(d)), dcos = d => Math.cos(rad(d)), dtan = d => Math.tan(rad(d));
+  const darcsin = x => deg(Math.asin(x)), darccos = x => deg(Math.acos(x)), darctan2 = (y, x) => deg(Math.atan2(y, x));
+  const darccot = x => deg(Math.atan(1 / x));
+  function julian(y, m, d){
+    if(m <= 2){ y -= 1; m += 12; }
+    const A = Math.floor(y / 100), B = 2 - A + Math.floor(A / 4);
+    return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + B - 1524.5;
+  }
+  function sunPos(jd){
+    const D = jd - 2451545.0;
+    const g = fix(357.529 + 0.98560028 * D, 360), q = fix(280.459 + 0.98564736 * D, 360);
+    const L = fix(q + 1.915 * dsin(g) + 0.020 * dsin(2 * g), 360);
+    const e = 23.439 - 0.00000036 * D;
+    const RA = fix(darctan2(dcos(e) * dsin(L), dcos(L)) / 15, 24);
+    return {decl: darcsin(dsin(e) * dsin(L)), eqt: q / 15 - RA};
+  }
+  /* Renvoie les heures (en heures décimales UTC) pour une date et une ville */
+  function times(y, m, d, lat, lng, method, asrFactor){
+    const jd = julian(y, m, d) - lng / (15 * 24);
+    const mid = t => fix(12 - sunPos(jd + t).eqt, 24);
+    const angleTime = (angle, t, ccw) => {
+      const decl = sunPos(jd + t).decl, noon = mid(t);
+      const T = darccos((-dsin(angle) - dsin(decl) * dsin(lat)) / (dcos(decl) * dcos(lat))) / 15;
+      return noon + (ccw ? -T : T);
+    };
+    const asrT = (f, t) => { const decl = sunPos(jd + t).decl; return angleTime(-darccot(f + dtan(Math.abs(lat - decl))), t); };
+    let tm = {fajr:5, sunrise:6, dhuhr:12, asr:13, sunset:18, isha:18};
+    for(let i = 0; i < 2; i++){
+      const p = k => tm[k] / 24;
+      tm = {
+        fajr: angleTime(method.fajr, p("fajr"), true),
+        sunrise: angleTime(0.833, p("sunrise"), true),
+        dhuhr: mid(p("dhuhr")),
+        asr: asrT(asrFactor, p("asr")),
+        sunset: angleTime(0.833, p("sunset")),
+        isha: method.isha ? angleTime(method.isha, p("isha")) : 18
+      };
+    }
+    // Hautes latitudes (été en France) : méthode « angle » (portion de la nuit)
+    const night = 24 - (tm.sunset - tm.sunrise);
+    const portion = a => a / 60 * night;
+    if(isNaN(tm.fajr) || tm.sunrise - tm.fajr > portion(method.fajr)) tm.fajr = tm.sunrise - portion(method.fajr);
+    if(method.isha){ if(isNaN(tm.isha) || tm.isha - tm.sunset > portion(method.isha)) tm.isha = tm.sunset + portion(method.isha); }
+    else tm.isha = tm.sunset + method.ishaMin / 60;
+    tm.maghrib = tm.sunset;
+    const out = {};
+    for(const k of ["fajr","sunrise","dhuhr","asr","maghrib","isha"]){
+      out[k] = tm[k] - lng / 15 + ((method.adj[k] || 0) / 60);
+    }
+    return out; // heures UTC décimales
+  }
+  return {times};
+})();
+
+/* Heures de prière d'un jour (date ISO) pour une ville, en heure locale de la ville */
+const _prayerCache = new Map();
+function prayerTimesFor(di, cityKey, methodKey, asr, extra){
+  extra = extra || {};
+  const k = di + "|" + cityKey + "|" + methodKey + "|" + asr + "|" + JSON.stringify(extra);
+  if(_prayerCache.has(k)) return _prayerCache.get(k);
+  const c = PRAYER_CITIES[cityKey], m = PRAYER_METHODS[methodKey] || PRAYER_METHODS[c.method];
+  const [y, mo, d] = di.split("-").map(Number);
+  const utc = PrayerCalc.times(y, mo, d, c.lat, c.lng, m, asr === "hanafi" ? 2 : 1);
+  const f = new Intl.DateTimeFormat("fr-FR", {timeZone:c.tz, hour:"2-digit", minute:"2-digit", hourCycle:"h23"});
+  const res = PRAYER_NAMES.map(([key, label]) => {
+    const ms = Date.UTC(y, mo - 1, d) + (Math.round(utc[key] * 60) + (+extra[key] || 0)) * 60000;
+    const parts = f.formatToParts(new Date(ms));
+    const hh = +parts.find(p => p.type === "hour").value, mm = +parts.find(p => p.type === "minute").value;
+    return {key, label, min: hh * 60 + mm, text: pad(hh) + ":" + pad(mm)};
+  });
+  _prayerCache.set(k, res);
+  return res;
+}
+
+/* ---------- réglages des prières (enregistrés dans Firebase, synchronisés sur vos appareils) ---------- */
+const PRAYER_DEFAULT = {on:true, city:"dubai", asr:"shafi", cities:{}};
+function prayerCfg(){
+  const s = (S.data.settings || []).find(x => x.id === "prayer") || {};
+  const {id:_x, ...rest} = s;
+  return {...PRAYER_DEFAULT, ...rest, cities:{...(rest.cities || {})}};
+}
+const cityCfg = (cfg, k) => ({method: PRAYER_CITIES[k].method, adj:{}, mawaqit:"", ...(cfg.cities[k] || {})});
+const showPrayers = () => isOwner() && S.tab === "perso" && prayerCfg().on;
+function prayersFor(di){
+  const cfg = prayerCfg(), cc = cityCfg(cfg, cfg.city);
+  return prayerTimesFor(di, cfg.city, cc.method, cfg.asr, cc.adj);
+}
+function savePrayer(next){
+  S.data.settings = (S.data.settings || []).filter(x => x.id !== "prayer").concat([{id:"prayer", ...next}]);
+  commit([{type:"set", coll:"settings", id:"prayer", data:next}]);
+  renderApp();
+}
+/* Date et minute actuelles dans la ville choisie */
+function cityNow(tz){
+  const parts = new Intl.DateTimeFormat("en-CA", {timeZone:tz, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hourCycle:"h23"}).formatToParts(new Date());
+  const g = t => parts.find(p => p.type === t).value;
+  return {di: g("year") + "-" + g("month") + "-" + g("day"), min: +g("hour") * 60 + +g("minute")};
+}
 
 /* ---------- état ---------- */
 let store = null;
@@ -1015,6 +1170,18 @@ function sidebarHtml(){
       <label class="cal-check"><input type="checkbox" id="chk-soc" ${S.showSoc?"checked":""} style="accent-color:#3D63F0"><span class="grow">Partagés <span class="sub">· collaborateurs</span></span>${I.users.replace('<svg', '<svg style="width:13px;height:13px;color:var(--faint)"')}</label>
       <label class="cal-check"><input type="checkbox" id="chk-kids" ${S.showKids?"checked":""} style="accent-color:#6B6B78"><span class="grow">Enfants <span class="sub">· en fond</span></span><span class="sq sq-ghost" style="width:8px;height:8px;border-radius:2px"></span></label></div>`;
   }
+  if(S.tab === "perso" && isOwner()){
+    const cfg = prayerCfg(), c = PRAYER_CITIES[cfg.city], cc = cityCfg(cfg, cfg.city);
+    h += `<div class="side-sec pr-sec"><div class="side-h pr-h"><span>Prières</span><input type="checkbox" class="tgl tgl-sm" id="pr-on" ${cfg.on ? "checked" : ""} aria-label="Afficher les heures de prière"></div>`;
+    if(cfg.on){
+      h += `<div class="pr-cities" role="group" aria-label="Ville">${Object.entries(PRAYER_CITIES).map(([k, v]) => `<button class="pr-city ${k === cfg.city ? "on" : ""}" data-city="${k}">${esc(v.name)}</button>`).join("")}</div>`;
+      const now = cityNow(c.tz), list = prayersFor(now.di);
+      const next = list.find(p => p.key !== "sunrise" && p.min > now.min);
+      h += `<div class="pr-today"><div class="pr-sub">Aujourd'hui à ${esc(c.name)}</div><div class="pr-grid">${list.map(p => `<div class="pr-row ${next && p.key === next.key ? "next" : ""} ${p.key === "sunrise" ? "sun" : ""}"><span>${p.label}</span><b>${p.text}</b></div>`).join("")}</div>
+        <div class="pr-links">${cc.mawaqit ? `<a href="${esc(cc.mawaqit)}" target="_blank" rel="noopener">Mawaqit ${I.ext}</a>` : ""}<button class="link-btn" id="pr-set">Réglages</button></div></div>`;
+    }
+    h += `</div>`;
+  }
   if(S.tab === "enfants" && kidsAdmin()){
     h += `<div class="side-sec"><div class="side-h">Gestion</div><button class="nav-item" id="manage-hol">${I.sun}<span class="grow">Vacances scolaires</span><span class="count">${S.data.holidays.length}</span></button></div>`;
   }
@@ -1050,6 +1217,9 @@ function bindSidebar(){
   const bind = (id, key, lsKey) => { const el = $(id); if(el) el.onchange = e => { S[key] = e.target.checked; ls.set(lsKey, S[key] ? "1" : "0"); renderApp(); }; };
   bind("chk-perso", "showPerso", "show-perso"); bind("chk-soc", "showSoc", "show-soc"); bind("chk-kids", "showKids", "showkids");
   const mh = $("manage-hol"); if(mh) mh.onclick = openHolidays;
+  const pon = $("pr-on"); if(pon) pon.onchange = () => savePrayer({...prayerCfg(), on: pon.checked});
+  app.querySelectorAll("[data-city]").forEach(b => b.onclick = () => savePrayer({...prayerCfg(), city: b.dataset.city}));
+  const pst = $("pr-set"); if(pst) pst.onclick = openPrayerSettings;
   if(DEMO) $("demo-role").onchange = e => setDemoRole(e.target.value);
   else {
     const lo = $("logout"); if(lo) lo.onclick = () => { if(confirm("Se déconnecter ?")) store.auth.signOut(); };
@@ -1163,11 +1333,15 @@ function renderTimeGrid(dates, items){
   const today = iso(todayDate());
   const n = dates.length;
   const cols = `52px repeat(${n}, minmax(0,1fr))`;
+  const P = showPrayers() ? prayersFor : null;
+  const inGrid = p => p.min >= START_HOUR*60 + 10 && p.min <= END_HOUR*60 - 10;
   let head = `<div class="tg-head" style="grid-template-columns:${cols}"><div></div>`;
   dates.forEach(d => {
     const di = iso(d), hol = holidayFor(di);
+    const outs = P ? P(di).filter(p => !inGrid(p) && p.key !== "sunrise") : [];
     head += `<div class="tg-day ${di===today?"today":""} ${hol?"hol":""}" data-day="${di}" title="${hol?esc(hol.label):""}">
-      <span class="dn">${DAY_NAMES[wd(d)]}</span><span class="dd">${d.getDate()}</span>${hol ? `<span class="holtag">${n > 1 ? "Vacances" : esc(hol.label)}</span>` : ""}</div>`;
+      <span class="dn">${DAY_NAMES[wd(d)]}</span><span class="dd">${d.getDate()}</span>${hol ? `<span class="holtag">${n > 1 ? "Vacances" : esc(hol.label)}</span>` : ""}
+      ${outs.length ? `<span class="pr-outs">${outs.map(p => `<span class="pr-out">${p.label} ${p.text}</span>`).join("")}</span>` : ""}</div>`;
   });
   head += `</div>`;
   const total = (END_HOUR - START_HOUR) * HOUR_PX;
@@ -1181,6 +1355,9 @@ function renderTimeGrid(dates, items){
     body += `<div class="tg-col ${holidayFor(di)?"hol":""}" data-date="${di}">`;
     layout(gs).forEach(x => body += blockHtml(x, x.busy ? "busy" : "ghost", false));
     layout(ms).forEach(x => body += blockHtml(x, "main", gs.some(g => overlapsRange(g.e, x.e.start, x.e.end))));
+    if(P) P(di).filter(inGrid).forEach(p => {
+      body += `<div class="pr-line ${p.key === "sunrise" ? "pr-sun" : ""}" style="top:${(p.min - START_HOUR*60) / 60 * HOUR_PX}px"><span>${p.label} ${p.text}</span></div>`;
+    });
     if(di === today){
       const now = new Date(), m = now.getHours()*60 + now.getMinutes();
       if(m >= START_HOUR*60 && m <= END_HOUR*60) body += `<div class="nowline" style="top:${(m-START_HOUR*60)/60*HOUR_PX}px"></div>`;
@@ -1218,6 +1395,7 @@ function legendHtml(){
   if(S.tab === "perso"){
     S.data.catPerso.slice().sort(byName).forEach(c => h += item(c, "perso", isOwner()));
     h += `<span class="lg">${I.users.replace("<svg", '<svg style="width:12px;height:12px;color:var(--muted)"')}Partagé avec les collaborateurs</span>`;
+    if(showPrayers()) h += `<span class="lg"><span class="sq" style="background:var(--prayer)"></span>Prières · ${esc(PRAYER_CITIES[prayerCfg().city].name)}</span>`;
     if(isOwner()) h += `<button class="lg-add" data-addcat="perso">+ Catégorie</button>`;
   } else if(S.tab === "enfants"){
     S.data.catEnf.slice().sort(byName).forEach(c => h += item(c, "enfants", kidsAdmin()));
@@ -2000,6 +2178,34 @@ function moveEvent(cal, id, cur){
   const resized = cur.date === e.date && cur.start === e.start;
   const d = parse(cur.date);
   commit(ops, resized ? `Se termine à ${fmt(cur.end)}.` : `Déplacé au ${DAY_LONG[wd(d)]} ${d.getDate()}, ${fmt(cur.start)}.`, undoOf(snap));
+}
+
+/* ---------- réglages des prières ---------- */
+function openPrayerSettings(){
+  const cfg = prayerCfg();
+  const keys = ["fajr","sunrise","dhuhr","asr","maghrib","isha"];
+  openModal(`<h3>Heures de prière</h3><div class="when">Calculées pour toute l'année. Ajustez les minutes pour coller à votre mosquée sur Mawaqit.</div>
+    <div class="field"><label for="ps-asr">Calcul de Asr</label><select id="ps-asr"><option value="shafi" ${cfg.asr !== "hanafi" ? "selected" : ""}>Standard (Chaféite, Malékite, Hanbalite)</option><option value="hanafi" ${cfg.asr === "hanafi" ? "selected" : ""}>Hanafite</option></select></div>
+    ${Object.entries(PRAYER_CITIES).map(([k, v]) => { const cc = cityCfg(cfg, k); return `<details class="ps-city" ${k === cfg.city ? "open" : ""}><summary>${esc(v.name)} <small>${esc((PRAYER_METHODS[cc.method] || {}).name || "")}</small></summary>
+      <div class="field"><label for="ps-m-${k}">Méthode</label><select id="ps-m-${k}">${Object.entries(PRAYER_METHODS).map(([mk, mv]) => `<option value="${mk}" ${mk === cc.method ? "selected" : ""}>${esc(mv.name)}</option>`).join("")}</select></div>
+      <div class="field"><label>Ajustements (minutes, + ou −)</label><div class="ps-adj">${keys.map((pk, i) => `<label>${PRAYER_NAMES[i][1]}<input type="number" step="1" min="-60" max="60" id="ps-a-${k}-${pk}" value="${+cc.adj[pk] || 0}"></label>`).join("")}</div></div>
+      <div class="field"><label for="ps-l-${k}">Lien Mawaqit de votre mosquée (facultatif)</label><input id="ps-l-${k}" type="url" placeholder="https://mawaqit.net/fr/…" value="${esc(cc.mawaqit)}"></div>
+    </details>`; }).join("")}
+    <div class="actions"><button class="btn btn-secondary push-left" data-close>Annuler</button><button class="btn btn-primary" id="ps-save">Enregistrer</button></div>`);
+  $("ps-save").onclick = () => {
+    const cities = {};
+    for(const k of Object.keys(PRAYER_CITIES)){
+      const adj = {};
+      keys.forEach(pk => { const v = Math.max(-60, Math.min(60, Math.round(+$(`ps-a-${k}-${pk}`).value || 0))); if(v) adj[pk] = v; });
+      let link = $(`ps-l-${k}`).value.trim();
+      if(link && !/^https:\/\//.test(link)) link = "";
+      cities[k] = {method: $(`ps-m-${k}`).value, adj, mawaqit: link};
+    }
+    const asr = $("ps-asr").value;
+    closeModal();
+    savePrayer({...prayerCfg(), asr, cities});
+    toast("Réglages des prières enregistrés.");
+  };
 }
 
 /* =====================================================================
