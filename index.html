@@ -679,8 +679,16 @@ function prayerCfg(){
   const {id:_x, ...rest} = s;
   return {...PRAYER_DEFAULT, ...rest, cities:{...(rest.cities || {})}};
 }
-const cityCfg = (cfg, k) => ({method: PRAYER_CITIES[k].method, adj:{}, mawaqit:"",
-  block: {on: k === "dubai", after:10, dur:30}, ...(cfg.cities[k] || {})});
+/* Réservation par défaut : Dubaï 10 min après l'adhan, Istanbul juste après ; 30 min chacun */
+const BLOCK_DEFAULT = {dubai:{on:true, after:10, dur:30}, istanbul:{on:true, after:0, dur:30}};
+const cityCfg = (cfg, k) => {
+  const c = {method: PRAYER_CITIES[k].method, adj:{}, mawaqit:"",
+    block: {...(BLOCK_DEFAULT[k] || {on:false, after:10, dur:30})}, ...(cfg.cities[k] || {})};
+  // ancien réglage enregistré sans y toucher (désactivé par défaut) → nouveau défaut
+  const b = c.block || {};
+  if(BLOCK_DEFAULT[k] && b.on === false && +b.after === 10 && +b.dur === 30) c.block = {...BLOCK_DEFAULT[k]};
+  return c;
+};
 /* Créneaux réservés après chaque prière (ex. Dubaï : 10 min après l'adhan, pendant 30 min) */
 function prayerBlocksFor(di){
   const cfg = prayerCfg(); if(!cfg.on) return [];
