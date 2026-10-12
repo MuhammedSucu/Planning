@@ -342,6 +342,8 @@
   .pr-line{position:absolute;left:0;right:0;height:0;border-top:1.5px dashed color-mix(in srgb,var(--prayer) 65%,transparent);z-index:1;pointer-events:none;}
   .pr-line span{position:absolute;right:3px;top:-8px;font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--prayer);background:var(--surface);padding:0 4px;border-radius:4px;line-height:15px;white-space:nowrap;box-shadow:0 0 0 1px var(--prayer-soft);}
   .pr-line.pr-sun{border-top-style:dotted;opacity:.55;}
+  .ev.ghost.prayer{background:repeating-linear-gradient(135deg,var(--prayer-soft) 0 6px,#F2FBF9 6px 12px);color:var(--prayer);outline:1px dashed color-mix(in srgb,var(--prayer) 45%,transparent);outline-offset:-1px;}
+  .ps-block{grid-template-columns:1fr 1fr;margin:-4px 0 13px;}
   .tg-day{flex-wrap:wrap;}
   .pr-outs{flex-basis:100%;display:flex;gap:4px;flex-wrap:wrap;}
   .pr-out{font-family:var(--mono);font-size:9.5px;font-weight:600;color:var(--prayer);background:var(--prayer-soft);border-radius:4px;padding:0 5px;line-height:16px;white-space:nowrap;}
@@ -661,7 +663,22 @@ function prayerCfg(){
   const {id:_x, ...rest} = s;
   return {...PRAYER_DEFAULT, ...rest, cities:{...(rest.cities || {})}};
 }
-const cityCfg = (cfg, k) => ({method: PRAYER_CITIES[k].method, adj:{}, mawaqit:"", ...(cfg.cities[k] || {})});
+const cityCfg = (cfg, k) => ({method: PRAYER_CITIES[k].method, adj:{}, mawaqit:"",
+  block: {on: k === "dubai", after:10, dur:30}, ...(cfg.cities[k] || {})});
+/* Créneaux réservés après chaque prière (ex. Dubaï : 10 min après l'adhan, pendant 30 min) */
+function prayerBlocksFor(di){
+  const cfg = prayerCfg(); if(!cfg.on) return [];
+  const b = cityCfg(cfg, cfg.city).block; if(!b || !b.on) return [];
+  return prayersFor(di).filter(p => p.key !== "sunrise")
+    .map(p => ({start: p.min + (+b.after || 0), end: p.min + (+b.after || 0) + Math.max(5, +b.dur || 30), label: p.label}));
+}
+/* Dans votre planning : bloc « Dhuhr » ; chez vos collaborateurs : « Occupé » */
+function prayerBlockItems(di){
+  const owner = isOwner() && S.tab === "perso", collab = S.role === "collab" && S.tab === "societe";
+  if(!owner && !collab) return [];
+  return prayerBlocksFor(di).map((b, i) => ({e:{id:"pr-" + di + "-" + i, date:di, start:b.start, end:b.end},
+    label: owner ? b.label : "Occupé", sub: owner ? "Prière" : "", busy: collab, prayer: owner}));
+}
 const showPrayers = () => isOwner() && S.tab === "perso" && prayerCfg().on;
 function prayersFor(di){
   const cfg = prayerCfg(), cc = cityCfg(cfg, cfg.city);
@@ -1350,10 +1367,10 @@ function renderTimeGrid(dates, items){
   body += `</div>`;
   dates.forEach(d => {
     const di = iso(d);
-    const gs = items.ghost.filter(x => x.e.date === di);
+    const gs = items.ghost.filter(x => x.e.date === di).concat(prayerBlockItems(di));
     const ms = items.main.filter(x => x.e.date === di);
     body += `<div class="tg-col ${holidayFor(di)?"hol":""}" data-date="${di}">`;
-    layout(gs).forEach(x => body += blockHtml(x, x.busy ? "busy" : "ghost", false));
+    layout(gs).forEach(x => body += blockHtml(x, x.busy ? "busy" : x.prayer ? "ghost prayer" : "ghost", false));
     layout(ms).forEach(x => body += blockHtml(x, "main", gs.some(g => overlapsRange(g.e, x.e.start, x.e.end))));
     if(P) P(di).filter(inGrid).forEach(p => {
       body += `<div class="pr-line ${p.key === "sunrise" ? "pr-sun" : ""}" style="top:${(p.min - START_HOUR*60) / 60 * HOUR_PX}px"><span>${p.label} ${p.text}</span></div>`;
@@ -1604,6 +1621,7 @@ function conflictFor(cal, data, excludeIds){
   if(cal === "societe" && !isOwner()){
     if(hit(S.data.societe)) return "taken";
     if(hit(busyList())) return "busy";
+    if(prayerBlocksFor(data.date).some(b => overlapsRange(b, data.start, data.end))) return "busy";
   }
   return null;
 }
@@ -2189,6 +2207,8 @@ function openPrayerSettings(){
     ${Object.entries(PRAYER_CITIES).map(([k, v]) => { const cc = cityCfg(cfg, k); return `<details class="ps-city" ${k === cfg.city ? "open" : ""}><summary>${esc(v.name)} <small>${esc((PRAYER_METHODS[cc.method] || {}).name || "")}</small></summary>
       <div class="field"><label for="ps-m-${k}">Méthode</label><select id="ps-m-${k}">${Object.entries(PRAYER_METHODS).map(([mk, mv]) => `<option value="${mk}" ${mk === cc.method ? "selected" : ""}>${esc(mv.name)}</option>`).join("")}</select></div>
       <div class="field"><label>Ajustements (minutes, + ou −)</label><div class="ps-adj">${keys.map((pk, i) => `<label>${PRAYER_NAMES[i][1]}<input type="number" step="1" min="-60" max="60" id="ps-a-${k}-${pk}" value="${+cc.adj[pk] || 0}"></label>`).join("")}</div></div>
+      <label class="check"><input type="checkbox" id="ps-b-${k}" ${cc.block && cc.block.on ? "checked" : ""}> Réserver du temps après chaque prière</label>
+      <div class="ps-adj ps-block"><label>Minutes après l'heure<input type="number" min="0" max="60" id="ps-ba-${k}" value="${cc.block ? +cc.block.after : 10}"></label><label>Durée (minutes)<input type="number" min="5" max="120" id="ps-bd-${k}" value="${cc.block ? +cc.block.dur : 30}"></label></div>
       <div class="field"><label for="ps-l-${k}">Lien Mawaqit de votre mosquée (facultatif)</label><input id="ps-l-${k}" type="url" placeholder="https://mawaqit.net/fr/…" value="${esc(cc.mawaqit)}"></div>
     </details>`; }).join("")}
     <div class="actions"><button class="btn btn-secondary push-left" data-close>Annuler</button><button class="btn btn-primary" id="ps-save">Enregistrer</button></div>`);
@@ -2199,7 +2219,8 @@ function openPrayerSettings(){
       keys.forEach(pk => { const v = Math.max(-60, Math.min(60, Math.round(+$(`ps-a-${k}-${pk}`).value || 0))); if(v) adj[pk] = v; });
       let link = $(`ps-l-${k}`).value.trim();
       if(link && !/^https:\/\//.test(link)) link = "";
-      cities[k] = {method: $(`ps-m-${k}`).value, adj, mawaqit: link};
+      const block = {on: $(`ps-b-${k}`).checked, after: Math.max(0, Math.min(60, Math.round(+$(`ps-ba-${k}`).value || 0))), dur: Math.max(5, Math.min(120, Math.round(+$(`ps-bd-${k}`).value || 30)))};
+      cities[k] = {method: $(`ps-m-${k}`).value, adj, mawaqit: link, block};
     }
     const asr = $("ps-asr").value;
     closeModal();
