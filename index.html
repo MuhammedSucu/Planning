@@ -75,7 +75,7 @@
   .cal-check input{margin:0;width:14px;height:14px;}
   .cal-check .grow{flex:1;}
   .cal-check .sub{color:var(--faint);}
-  .sq-ghost{background:repeating-linear-gradient(135deg,#B9B9C4 0 2px,#EDEDF1 2px 4px);}
+  .sq-ghost{background:#C9C9D3;width:4px !important;}
 
   .side-foot{margin-top:auto;display:flex;flex-direction:column;gap:14px;}
   .avatars{display:flex;gap:6px;padding:0 6px;flex-wrap:wrap;}
@@ -346,6 +346,10 @@
   .pr-tick{position:absolute;left:0;right:0;border-top:2px solid color-mix(in srgb,var(--prayer) 45%,transparent);z-index:0;pointer-events:none;}
   .pr-gut{position:absolute;left:0;right:0;display:flex;align-items:flex-end;justify-content:flex-start;padding:0 0 2px 5px;font-size:9.5px;line-height:1;font-weight:600;color:var(--prayer);background:color-mix(in srgb,var(--prayer) 9%,transparent);border-top:2px solid color-mix(in srgb,var(--prayer) 55%,transparent);box-sizing:border-box;}
   .tg-gutter{z-index:1;}
+  .pr-t{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-family:var(--mono, ui-monospace, monospace);font-size:10px;line-height:1;color:color-mix(in srgb,var(--prayer) 60%,transparent);pointer-events:none;}
+  .pr-tick[data-t]::after{content:attr(data-t);position:absolute;right:6px;top:2px;font-size:10px;line-height:1;color:color-mix(in srgb,var(--prayer) 60%,transparent);}
+  /* Cours des enfants en fond : fine barre grise sur le bord gauche du jour */
+  .ev.ghost:not(.prayer){left:0 !important;width:5px !important;padding:0;border-radius:0 3px 3px 0;background:#C9C9D3;outline:none;box-shadow:none;font-size:0;color:transparent;overflow:hidden;}
   .pr-band.busy-band{background:repeating-linear-gradient(135deg,var(--busy-a) 0 6px,var(--busy-b) 6px 12px);border-top:none;cursor:not-allowed;}
   .holrow{background:var(--hol-head);border-bottom:1px solid var(--line);}
   .holband{font-size:11px;font-weight:600;color:var(--hol-ink);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line-soft);}
@@ -1402,7 +1406,7 @@ function renderTimeGrid(dates, items){
       prayerBlocksFor(di).forEach(b => {
         if(b.end <= START_HOUR*60 || b.start >= END_HOUR*60) return;
         const adhan = times.find(t => t.label === b.label);
-        body += `<div class="pr-band" style="top:${(b.start - START_HOUR*60) / 60 * HOUR_PX}px;height:${(b.end - b.start) / 60 * HOUR_PX}px" title="${b.label} ${adhan ? adhan.text : ""} · réservé ${fmt(b.start)}–${fmt(b.end)}"></div>`;
+        body += `<div class="pr-band" style="top:${(b.start - START_HOUR*60) / 60 * HOUR_PX}px;height:${(b.end - b.start) / 60 * HOUR_PX}px" title="${b.label} ${adhan ? adhan.text : ""} · réservé ${fmt(b.start)}–${fmt(b.end)}">${adhan ? `<span class="pr-t">${adhan.text}</span>` : ""}</div>`;
       });
     } else if(S.role === "collab" && S.tab === "societe"){
       // chez les collaborateurs : simple bande grise « Occupé », sans texte
@@ -1411,7 +1415,7 @@ function renderTimeGrid(dates, items){
         body += `<div class="pr-band busy-band" style="top:${(b.start - START_HOUR*60) / 60 * HOUR_PX}px;height:${(b.end - b.start) / 60 * HOUR_PX}px" title="Occupé ${fmt(b.start)}–${fmt(b.end)}"></div>`;
       });
     } else if(P) P(di).filter(p => inGrid(p) && p.key !== "sunrise").forEach(p => {
-      body += `<div class="pr-tick" style="top:${(p.min - START_HOUR*60) / 60 * HOUR_PX}px" title="${p.label} ${p.text}"></div>`;
+      body += `<div class="pr-tick" data-t="${p.text}" style="top:${(p.min - START_HOUR*60) / 60 * HOUR_PX}px" title="${p.label} ${p.text}"></div>`;
     });
     if(di === today){
       const now = new Date(), m = now.getHours()*60 + now.getMinutes();
