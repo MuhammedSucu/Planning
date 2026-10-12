@@ -352,6 +352,9 @@
   .ev.ghost:not(.prayer){background:#F4F4F7;outline:none;box-shadow:none;color:#A3A3AE;}
   .ev.ghost:not(.prayer) .ev-t{font-weight:500;}
   .ev.ghost:not(.prayer) .ev-s, .ev.ghost:not(.prayer) .ev-h{display:none;}
+  /* Rendez-vous qui chevauche un cours des enfants : semi-transparent, le cours se lit à travers (à droite) */
+  .ev.main.overkid{background:color-mix(in srgb,var(--evbg) 50%,transparent);box-shadow:inset 2px 0 0 var(--evbar),inset 0 0 0 1px color-mix(in srgb,var(--evbar) 35%,transparent);}
+  .ev.ghost.under:not(.prayer){text-align:right;color:#6E6E7A;background:#ECECF1;}
   .pr-band.busy-band{background:repeating-linear-gradient(135deg,var(--busy-a) 0 6px,var(--busy-b) 6px 12px);border-top:none;cursor:not-allowed;}
   .holrow{background:var(--hol-head);border-bottom:1px solid var(--line);}
   .holband{font-size:11px;font-weight:600;color:var(--hol-ink);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line-soft);}
@@ -1348,7 +1351,7 @@ function blockHtml(x, kind, inset){
   const width = inset ? `calc(${w}% - 13px)` : `calc(${w}% - 6px)`;
   const short = height < 38;
   const movable = kind === "main" && canEdit(x.cal, x.e) && !x.e.cancelled;
-  const cls = ["ev", kind, x.e.cancelled ? "cancelled" : "", short ? "short" : "", x.dim ? "dim" : "", movable ? "movable" : ""].join(" ");
+  const cls = ["ev", kind, inset ? "overkid" : "", x.under ? "under" : "", x.e.cancelled ? "cancelled" : "", short ? "short" : "", x.dim ? "dim" : "", movable ? "movable" : ""].join(" ");
   const pos = `top:${top}px;height:${height}px;left:calc(${left}% + 3px);`;
   const style = kind === "main" ? pos + `width:${width};` + paintVars(x.color) : pos + `width:calc(${w}% - 6px);`;
   const attrs = kind === "main" ? `data-cal="${x.cal}" data-id="${esc(x.e.id)}"` : "";
@@ -1400,6 +1403,7 @@ function renderTimeGrid(dates, items){
     const gs = items.ghost.filter(x => x.e.date === di);
     const ms = items.main.filter(x => x.e.date === di);
     body += `<div class="tg-col ${holidayFor(di)?"hol":""}" data-date="${di}">`;
+    gs.forEach(g => { g.under = !g.busy && ms.some(x => overlapsRange(g.e, x.e.start, x.e.end)); });
     layout(gs).forEach(x => body += blockHtml(x, x.busy ? "busy" : x.prayer ? "ghost prayer" : "ghost", false));
     layout(ms).forEach(x => body += blockHtml(x, "main", gs.some(g => overlapsRange(g.e, x.e.start, x.e.end))));
     if(P && blocksOn){
