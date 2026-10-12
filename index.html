@@ -75,7 +75,7 @@
   .cal-check input{margin:0;width:14px;height:14px;}
   .cal-check .grow{flex:1;}
   .cal-check .sub{color:var(--faint);}
-  .sq-ghost{background:#C9C9D3;width:4px !important;}
+  .sq-ghost{background:#E4E4EA;}
 
   .side-foot{margin-top:auto;display:flex;flex-direction:column;gap:14px;}
   .avatars{display:flex;gap:6px;padding:0 6px;flex-wrap:wrap;}
@@ -348,8 +348,10 @@
   .tg-gutter{z-index:1;}
   .pr-t{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-family:var(--mono, ui-monospace, monospace);font-size:10px;line-height:1;color:color-mix(in srgb,var(--prayer) 60%,transparent);pointer-events:none;}
   .pr-tick[data-t]::after{content:attr(data-t);position:absolute;right:6px;top:2px;font-size:10px;line-height:1;color:color-mix(in srgb,var(--prayer) 60%,transparent);}
-  /* Cours des enfants en fond : fine barre grise sur le bord gauche du jour */
-  .ev.ghost:not(.prayer){left:0 !important;width:5px !important;padding:0;border-radius:0 3px 3px 0;background:#C9C9D3;outline:none;box-shadow:none;font-size:0;color:transparent;overflow:hidden;}
+  /* Cours des enfants en fond : aplat très clair, juste le nom */
+  .ev.ghost:not(.prayer){background:#F4F4F7;outline:none;box-shadow:none;color:#A3A3AE;}
+  .ev.ghost:not(.prayer) .ev-t{font-weight:500;}
+  .ev.ghost:not(.prayer) .ev-s, .ev.ghost:not(.prayer) .ev-h{display:none;}
   .pr-band.busy-band{background:repeating-linear-gradient(135deg,var(--busy-a) 0 6px,var(--busy-b) 6px 12px);border-top:none;cursor:not-allowed;}
   .holrow{background:var(--hol-head);border-bottom:1px solid var(--line);}
   .holband{font-size:11px;font-weight:600;color:var(--hol-ink);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line-soft);}
