@@ -1293,6 +1293,45 @@ function periodLabel(){
   return d.toLocaleDateString("fr-FR",{month:"long", year:"numeric"});
 }
 
+
+/* ---------- Ménage : catégories utilisées une seule fois ---------- */
+const KEEP_CATS = ["anglais","francais","arabe","ecole","gouter"];
+function cleanupCandidates(){
+  const out = [];
+  [["perso", S.data.perso.concat(S.data.societe)], ["enfants", S.data.enfants]].forEach(([cal, evs]) => {
+    catList(cal).forEach(c => {
+      if(KEEP_CATS.includes(norm(c.name))) return;
+      const n = evs.filter(e => e.cat === c.id).length;
+      if(n <= 1) out.push({cal, c, n});
+    });
+  });
+  return out;
+}
+function openCleanup(){
+  const list = cleanupCandidates();
+  if(!list.length){ toast("Rien à ranger."); return; }
+  openModal(`<div class="ed"><div class="ed-top"><h3 class="ed-h">Faire le ménage</h3><button type="button" class="icon-btn" data-close aria-label="Fermer">${I.x}</button></div>
+    <p class="muted" style="margin:4px 0 10px">Ces ${list.length} catégories ne servent qu'une fois (ou jamais). Elles seront supprimées ; les rendez-vous gardent leur nom comme titre, rien n'est perdu.</p>
+    <div class="chips" style="max-height:220px;overflow:auto;margin-bottom:12px">${list.map(x => `<span class="lg"><span class="sq" style="background:${x.c.text}"></span>${esc(x.c.name)}</span>`).join("")}</div>
+    <p class="muted" style="font-size:12px;margin:0 0 12px">Toujours gardées : Anglais, Français, Arabe, École, Goûter.</p>
+    <div class="actions"><button class="btn btn-secondary push-left" data-close>Annuler</button><button class="btn btn-primary" id="cl-go">Supprimer ces ${list.length} catégories</button></div></div>`);
+  $("cl-go").onclick = () => { closeModal(); runCleanup(list); };
+}
+function runCleanup(list){
+  const ops = [], undo = [];
+  const evsOf = cal => cal === "perso" ? [["perso", S.data.perso], ["societe", S.data.societe]] : [["enfants", S.data.enfants]];
+  list.forEach(({cal, c}) => {
+    evsOf(cal).forEach(([ecal, evs]) => evs.filter(e => e.cat === c.id).forEach(e => {
+      ops.push({type:"update", coll:"ev_"+ecal, id:e.id, data:{title: e.title || c.name, cat:null}});
+      undo.push({type:"update", coll:"ev_"+ecal, id:e.id, data:{title: e.title || "", cat:c.id}});
+    }));
+    const {id, ...data} = c;
+    ops.push({type:"delete", coll:"categories", id});
+    undo.unshift({type:"set", coll:"categories", id, data:{...data, cal}});
+  });
+  commit(ops, `${list.length} catégories supprimées.`, {label:"Annuler", fn: () => commit(undo, "C'est annulé.")});
+}
+
 /* ---------- éléments à afficher ---------- */
 function buildItems(){
   const main = [], ghost = [];
@@ -1305,11 +1344,11 @@ function buildItems(){
       const fromCollab = e.createdBy && !isOwnerEmail(e.createdBy);
       main.push({cal:"societe", e, shared:true, label: evTitle("societe", e), sub: fromCollab ? "Posé par " + e.createdByName : (e.cat ? catOf("perso", e.cat).name : "Partagé"), color: evColor("societe", e)});
     });
-    if(S.showKids) S.data.enfants.filter(e => !e.cancelled).forEach(e => ghost.push({e, label: catOf("enfants", e.cat).name, sub:"Enfants"}));
+    if(S.showKids) S.data.enfants.filter(e => !e.cancelled).forEach(e => ghost.push({e, label: evTitle("enfants", e), sub:"Enfants"}));
   } else if(S.tab === "enfants"){
     S.data.enfants.forEach(e => {
       const c = catOf("enfants", e.cat);
-      main.push({cal:"enfants", e, label: c.name, sub: e.createdByName && e.createdBy !== me() ? e.createdByName : "", color:c});
+      main.push({cal:"enfants", e, label: evTitle("enfants", e), sub: e.createdByName && e.createdBy !== me() ? e.createdByName : "", color:c});
     });
   } else if(S.tab === "societe"){
     // Vue des collaborateurs : rendez-vous partagés en détail, le reste en « Occupé »
@@ -1465,6 +1504,8 @@ function legendHtml(){
     shown.forEach(c => h += item(c, "perso", isOwner()));
     if(all.length > shown.length || S.allCats) h += `<button class="lg-add" id="lg-all">${S.allCats ? "Seulement cette semaine" : `Toutes les catégories (${all.length})`}</button>`;
     if(isOwner()) h += `<button class="lg-add" data-addcat="perso">+ Catégorie</button>`;
+    const nClean = isOwner() ? cleanupCandidates().length : 0;
+    if(nClean) h += `<button class="lg-add" id="lg-clean" title="Supprimer les catégories qui ne servent qu'une fois">Faire le ménage (${nClean})</button>`;
   } else if(S.tab === "enfants"){
     S.data.catEnf.slice().sort(byName).forEach(c => h += item(c, "enfants", kidsAdmin()));
     if(S.role !== "collab") h += `<button class="lg-add" data-addcat="enfants">+ Cours</button>`;
@@ -1511,6 +1552,7 @@ function bindCalendar(main){
   s.onblur = () => { S.searchFocus = false; };
 
   const la = $("lg-all"); if(la) la.onclick = () => { S.allCats = !S.allCats; renderApp(); };
+  const lc = $("lg-clean"); if(lc) lc.onclick = openCleanup;
   main.querySelectorAll("[data-addcat]").forEach(b => b.onclick = () => { if(b.dataset.addcat === "perso") S.allCats = true; openCatPopover(b.dataset.addcat, null, b.getBoundingClientRect()); });
   main.querySelectorAll("[data-editcat]").forEach(b => b.onclick = () => openCatPopover(b.dataset.cal, b.dataset.editcat, b.getBoundingClientRect()));
 
@@ -1682,7 +1724,7 @@ function conflictFor(cal, data, excludeIds){
 const findEv = (cal, id) => (S.data[cal] || []).find(x => x.id === id);
 const seriesOf = (cal, e) => e.recurrenceId ? S.data[cal].filter(x => x.recurrenceId === e.recurrenceId) : [e];
 function evTitle(cal, e){
-  if(cal === "enfants") return catOf("enfants", e.cat).name;
+  if(cal === "enfants") return e.title || catOf("enfants", e.cat).name;
   if(cal === "perso") return e.title || (e.cat ? catOf("perso", e.cat).name : "Sans titre");
   return e.title || (e.cat && S.data.catPerso.some(c => c.id === e.cat) ? catOf("perso", e.cat).name : "Réunion");
 }
@@ -1760,7 +1802,7 @@ function openEditor(o){
   const dur = e ? e.end - e.start : (o.end ? o.end - o.start : 60);
   ED = {
     mode:o.mode, cal, kind, e, anchor:o.anchor || null,
-    title: e ? (kind === "kids" ? (S.data.catEnf.some(c => c.id === e.cat) ? catOf("enfants", e.cat).name : "") : (e.title || "")) : "",
+    title: e ? (kind === "kids" ? (e.title || (S.data.catEnf.some(c => c.id === e.cat) ? catOf("enfants", e.cat).name : "")) : (e.title || "")) : "",
     date: e ? e.date : o.date, start: e ? e.start : o.start, dur,
     cat: e ? (e.cat || null) : null,
     shared: e ? cal === "societe" : false,
@@ -1828,7 +1870,8 @@ function renderEditor(first){
     h += `<label class="ed-row ed-toggle">${ICO_USERS_ROW()}<span class="grow">Visible par mes collaborateurs<small>${E.shared ? "Ils voient le titre et peuvent s'organiser autour" : "Ils voient seulement « Occupé »"}</small></span><input type="checkbox" id="ed-shared" class="tgl" ${E.shared?"checked":""}></label>`;
   } else if(E.kind === "kids"){
     const courses = historyFor("kids").slice(0, 8);
-    if(courses.length) h += `<div class="ed-row">${I.tag}<div class="chips" id="ed-courses">${courses.map(c => catChip(S.data.catEnf.find(x => x.id === c.cat), norm(E.title) === norm(c.title), "enfants")).join("")}</div></div>`;
+    const addCourse = canAddCat("enfants") ? `<button type="button" class="chip chip-add" id="ed-course-add" aria-label="Nouveau cours" title="Nouveau cours">+</button>` : "";
+    if(courses.length || addCourse) h += `<div class="ed-row">${I.tag}<div class="chips" id="ed-courses">${courses.map(c => catChip(S.data.catEnf.find(x => x.id === c.cat), norm(E.title) === norm(c.title), "enfants")).join("")}${addCourse}</div></div>`;
     if(E.catForm) h += `<div class="ed-row ed-sub"><span class="ed-sp"></span>${catFormHtml("enfants", E.catForm)}</div>`;
   }
 
@@ -1941,6 +1984,8 @@ function bindEditor(following){
   });
   const addC = $("ed-cat-add");
   if(addC) addC.onclick = () => { E.catForm = {id:null, name:"", ...PALETTE[S.data.catPerso.length % PALETTE.length]}; re(); };
+  const addK = $("ed-course-add");
+  if(addK) addK.onclick = () => { E.catForm = {id:null, name:E.title.trim(), ...PALETTE[S.data.catEnf.length % PALETTE.length]}; re(); };
   document.querySelectorAll("[data-editchip]").forEach(b => b.onclick = () => {
     const cal = E.kind === "kids" ? "enfants" : "perso";
     E.catForm = catList(cal).find(x => x.id === b.dataset.editchip) || null; re();
@@ -2038,14 +2083,14 @@ function saveEditor(){
   let cat = E.cat;
   if(E.kind === "kids"){
     if(!title){ toast("Indiquez le cours (ex. Anglais).", "err"); $("ed-title").focus(); return; }
+    // un nom qui correspond à un cours → ce cours ; sinon, simple titre (pas de nouveau cours)
     const found = S.data.catEnf.find(c => norm(c.name) === norm(title));
-    cat = found ? found.id : addCategory("enfants", title);
-    if(!cat){ toast("Impossible de créer ce cours.", "err"); return; }
+    cat = found ? found.id : null;
   } else if(!title && !(E.kind === "own" && cat)){
     toast(E.kind === "collab" ? "Indiquez l'objet de la réunion." : "Ajoutez un titre.", "err"); $("ed-title").focus(); return;
   }
   const cal = E.kind === "own" ? (E.shared ? "societe" : "perso") : E.kind === "kids" ? "enfants" : "societe";
-  const fields = {title: E.kind === "kids" ? "" : title, note};
+  const fields = {title: E.kind === "kids" ? (cat ? "" : title) : title, note};
   if(E.kind !== "collab") fields.cat = cat || null;
   if(E.mode === "create") createEvents(cal, fields, start, end);
   else updateEvents(cal, fields, start, end);
