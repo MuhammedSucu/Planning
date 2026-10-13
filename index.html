@@ -1042,6 +1042,21 @@ function scheduleRender(){
   });
 }
 const DRAG = {active:false, pendingRender:false};
+/* La ligne « maintenant » avance toute seule (et le planning passe au jour suivant à minuit) */
+let _nowDay = iso(new Date());
+function tickNow(){
+  const d = iso(new Date());
+  const busy = DRAG.active || ED || document.querySelector(".overlay");
+  if(d !== _nowDay){ if(busy) return; _nowDay = d; if(S.user) renderApp(); return; }
+  const now = new Date(), m = now.getHours()*60 + now.getMinutes();
+  document.querySelectorAll(".nowline").forEach(el => {
+    const inR = m >= START_HOUR*60 && m <= END_HOUR*60;
+    el.style.display = inR ? "" : "none";
+    if(inR) el.style.top = (m - START_HOUR*60) / 60 * HOUR_PX + "px";
+  });
+}
+setInterval(tickNow, 30000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) tickNow(); });
 const onWatchError = err => { console.error(err); toast("Impossible de charger certaines données (accès refusé ou connexion).", "err"); };
 function watchInto(arr, coll, opt, key){
   const conv = /^(ev_|busy$)/.test(coll);
@@ -1556,7 +1571,8 @@ function renderTimeGrid(dates, items){
     });
     if(di === today){
       const now = new Date(), m = now.getHours()*60 + now.getMinutes();
-      if(m >= START_HOUR*60 && m <= END_HOUR*60) body += `<div class="nowline" style="top:${(m-START_HOUR*60)/60*HOUR_PX}px"></div>`;
+      const inR = m >= START_HOUR*60 && m <= END_HOUR*60;
+      body += `<div class="nowline" style="top:${(Math.min(Math.max(m, START_HOUR*60), END_HOUR*60)-START_HOUR*60)/60*HOUR_PX}px;${inR ? "" : "display:none"}"></div>`;
     }
     body += `</div>`;
   });
