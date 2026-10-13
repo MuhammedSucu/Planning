@@ -355,6 +355,8 @@
   /* Rendez-vous qui chevauche un cours des enfants : semi-transparent, le cours se lit à travers (à droite) */
   .ev.main.overkid{background:color-mix(in srgb,var(--evbg) 50%,transparent);box-shadow:inset 2px 0 0 var(--evbar),inset 0 0 0 1px color-mix(in srgb,var(--evbar) 35%,transparent);}
   .ev.ghost.under:not(.prayer){text-align:right;color:#6E6E7A;background:#ECECF1;}
+  .tz-chip{font-size:11.5px;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:3px 9px;white-space:nowrap;}
+  .ev-tz{opacity:.75;font-weight:400;}
   .pr-band.busy-band{background:repeating-linear-gradient(135deg,var(--busy-a) 0 6px,var(--busy-b) 6px 12px);border-top:none;cursor:not-allowed;}
   .holrow{background:var(--hol-head);border-bottom:1px solid var(--line);}
   .holband{font-size:11px;font-weight:600;color:var(--hol-ink);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line-soft);}
@@ -543,6 +545,51 @@ const ICO_USERS_ROW = () => I.users.replace("<svg", '<svg class="ed-ico"');
 
 /* ---------- utilitaires ---------- */
 const pad = n => String(n).padStart(2,"0");
+
+/* =====================================================================
+   FUSEAUX HORAIRES — chaque créneau est enregistré avec son fuseau (tz) ;
+   chacun le voit converti dans l'heure de son appareil.
+   Les anciens créneaux sans fuseau sont considérés à l'heure de Dubaï.
+   ===================================================================== */
+const DEFAULT_TZ = "Asia/Dubai";
+const VIEW_TZ = (() => { try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TZ; }catch(e){ return DEFAULT_TZ; } })();
+const TZ_NAMES = {"Asia/Dubai":"Dubaï", "Europe/Istanbul":"Istanbul", "Europe/Paris":"France", "Europe/London":"Londres", "Asia/Muscat":"Oman", "Asia/Riyadh":"Riyad", "Asia/Qatar":"Qatar", "Europe/Berlin":"Allemagne", "Europe/Zurich":"Suisse", "Europe/Brussels":"Belgique", "America/New_York":"New York", "UTC":"UTC"};
+const tzName = tz => TZ_NAMES[tz] || String(tz).split("/").pop().replace(/_/g, " ");
+const _tzFmt = {};
+function tzWall(tz, ms){ // heure murale {y,m,d,min} dans un fuseau
+  const f = _tzFmt[tz] || (_tzFmt[tz] = new Intl.DateTimeFormat("en-CA", {timeZone:tz, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hourCycle:"h23"}));
+  const o = {}; f.formatToParts(new Date(ms)).forEach(x => o[x.type] = x.value);
+  return {y:+o.year, m:+o.month, d:+o.day, min:(+o.hour % 24) * 60 + (+o.minute)};
+}
+function tzToUtc(di, min, tz){ // date ISO + minutes dans tz → ms UTC
+  const [y, m, d] = di.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d) + min * 60000;
+  let ms = guess;
+  for(let i = 0; i < 2; i++){
+    const w = tzWall(tz, ms);
+    ms += guess - (Date.UTC(w.y, w.m - 1, w.d) + w.min * 60000);
+  }
+  return ms;
+}
+function shiftTz(di, min, from, to){ // → {date, min} dans le fuseau "to"
+  if(from === to) return {date:di, min};
+  const w = tzWall(to, tzToUtc(di, min, from));
+  return {date:`${w.y}-${pad(w.m)}-${pad(w.d)}`, min:w.min};
+}
+/* Document lu → créneau affiché dans l'heure de l'appareil */
+function toView(doc){
+  if(!doc || typeof doc.date !== "string" || typeof doc.start !== "number") return doc;
+  const src = doc.tz || DEFAULT_TZ;
+  const v = {...doc, tz:VIEW_TZ};
+  if(src !== VIEW_TZ){
+    const a = shiftTz(doc.date, doc.start, src, VIEW_TZ);
+    v.date = a.date; v.start = a.min;
+    v.end = Math.min(1440, a.min + (doc.end - doc.start));
+    // heure d'origine (non enregistrée : propriété invisible)
+    Object.defineProperty(v, "_orig", {value:{tz:src, start:doc.start, end:doc.end}, enumerable:false});
+  }
+  return v;
+}
 const fmt = m => pad(Math.floor(m/60)) + ":" + pad(m%60);
 const iso = d => d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
 const parse = s => new Date(s + "T00:00:00");
@@ -704,9 +751,29 @@ function prayerBlockItems(di){
     label: owner ? b.label : "Occupé", sub: owner ? "Prière" : "", busy: collab, prayer: owner}));
 }
 const showPrayers = () => isOwner() && S.tab === "perso" && prayerCfg().on;
-function prayersFor(di){
+/* Heures de prière dans l'heure de la ville (panneau « Aujourd'hui à … ») */
+function prayersCity(di){
   const cfg = prayerCfg(), cc = cityCfg(cfg, cfg.city);
   return prayerTimesFor(di, cfg.city, cc.method, cfg.asr, cc.adj);
+}
+/* … et converties dans l'heure de l'appareil (planning) */
+const _prView = new Map();
+function prayersFor(di){
+  const cfg = prayerCfg(), city = PRAYER_CITIES[cfg.city], ctz = city.tz;
+  if(ctz === VIEW_TZ) return prayersCity(di);
+  const k = di + "|" + JSON.stringify(cfg);
+  if(_prView.has(k)) return _prView.get(k);
+  const out = [];
+  [-1, 0, 1].forEach(off => {
+    const cd = iso(addDays(parse(di), off));
+    prayersCity(cd).forEach(p => {
+      const v = shiftTz(cd, p.min, ctz, VIEW_TZ);
+      if(v.date === di) out.push({...p, min:v.min, text:fmt(v.min)});
+    });
+  });
+  out.sort((a, b) => a.min - b.min);
+  _prView.set(k, out);
+  return out;
 }
 function savePrayer(next){
   S.data.settings = (S.data.settings || []).filter(x => x.id !== "prayer").concat([{id:"prayer", ...next}]);
@@ -809,7 +876,23 @@ document.addEventListener("keydown", e => {
   if(!typing && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "n" && canCreateHere()){ e.preventDefault(); quickCreate(); }
 });
 
+function withTz(ops){
+  return ops.map(o => {
+    if(!/^(ev_|busy$)/.test(o.coll) || !o.data || (o.type !== "set" && o.type !== "update")) return o;
+    const d = o.data;
+    if(!("date" in d) && !("start" in d) && !("end" in d)) return o;
+    const data = {...d};
+    if(o.type === "update" && !("date" in d && "start" in d && "end" in d)){
+      const cal = o.coll === "busy" ? "busy" : o.coll.slice(3);
+      const cur = (S.data[cal] || []).find(x => x.id === o.id);
+      if(cur) ["date","start","end"].forEach(k => { if(!(k in data)) data[k] = cur[k]; });
+    }
+    if(!("tz" in d)) data.tz = VIEW_TZ;
+    return {...o, data};
+  });
+}
 function commit(ops, okMsg, action){
+  ops = withTz(ops);
   return store.batch(ops).then(() => { if(okMsg) toast(okMsg, "", action); return true; })
     .catch(err => {
       console.error(err);
@@ -961,7 +1044,8 @@ function scheduleRender(){
 const DRAG = {active:false, pendingRender:false};
 const onWatchError = err => { console.error(err); toast("Impossible de charger certaines données (accès refusé ou connexion).", "err"); };
 function watchInto(arr, coll, opt, key){
-  arr.push(store.watch(coll, opt, list => { S.data[key] = list; scheduleRender(); }, onWatchError));
+  const conv = /^(ev_|busy$)/.test(coll);
+  arr.push(store.watch(coll, opt, list => { S.data[key] = conv ? list.map(toView) : list; scheduleRender(); }, onWatchError));
 }
 function subscribeEvents(){
   unsubEvents.forEach(u => { try{ u(); }catch(e){} });
@@ -1216,7 +1300,7 @@ function sidebarHtml(){
     h += `<div class="side-sec pr-sec"><div class="side-h pr-h"><span>Prières</span><input type="checkbox" class="tgl tgl-sm" id="pr-on" ${cfg.on ? "checked" : ""} aria-label="Afficher les heures de prière"></div>`;
     if(cfg.on){
       h += `<div class="pr-cities" role="group" aria-label="Ville">${Object.entries(PRAYER_CITIES).map(([k, v]) => `<button class="pr-city ${k === cfg.city ? "on" : ""}" data-city="${k}">${esc(v.name)}</button>`).join("")}</div>`;
-      const now = cityNow(c.tz), list = prayersFor(now.di);
+      const now = cityNow(c.tz), list = prayersCity(now.di);
       const next = list.find(p => p.key !== "sunrise" && p.min > now.min);
       h += `<div class="pr-today"><div class="pr-sub">Aujourd'hui à ${esc(c.name)}</div><div class="pr-grid">${list.map(p => `<div class="pr-row ${next && p.key === next.key ? "next" : ""} ${p.key === "sunrise" ? "sun" : ""}"><span>${p.label}</span><b>${p.text}</b></div>`).join("")}</div>
         <div class="pr-links">${cc.mawaqit ? `<a href="${esc(cc.mawaqit)}" target="_blank" rel="noopener">Mawaqit ${I.ext}</a>` : ""}<button class="link-btn" id="pr-set">Réglages</button></div></div>`;
@@ -1404,7 +1488,7 @@ function blockHtml(x, kind, inset){
   const attrs = kind === "main" ? `data-cal="${x.cal}" data-id="${esc(x.e.id)}"` : "";
   const tip = esc(x.label + (x.sub ? " · " + x.sub : "") + " · " + fmt(x.e.start) + "–" + fmt(x.e.end) + (x.e.cancelled ? " (annulé)" : ""));
   return `<div class="${cls}" style="${style}" ${attrs} title="${tip}">
-    <span class="ev-t">${x.e.cancelled ? "✕ " : ""}${x.shared ? I.users.replace("<svg", '<svg class="ev-ico"') : ""}${esc(x.label)}</span><span class="ev-h">${fmt(x.e.start)}–${fmt(x.e.end)}</span>${!short && x.sub && height > 58 ? `<span class="ev-s">${esc(x.sub)}</span>` : ""}
+    <span class="ev-t">${x.e.cancelled ? "✕ " : ""}${x.shared ? I.users.replace("<svg", '<svg class="ev-ico"') : ""}${esc(x.label)}</span><span class="ev-h">${fmt(x.e.start)}–${fmt(x.e.end)}${x.e._orig && kind === "main" ? ` <span class="ev-tz">(${fmt(x.e._orig.start)} ${esc(tzName(x.e._orig.tz))})</span>` : ""}</span>${!short && x.sub && height > 58 ? `<span class="ev-s">${esc(x.sub)}</span>` : ""}
     ${movable ? `<span class="ev-resize" aria-hidden="true"></span>` : ""}
   </div>`;
 }
@@ -1531,7 +1615,7 @@ function renderCalendar(main){
   const items = buildItems();
   const wk = isoWeek(S.view === "month" ? addDays(startOfWeek(firstOfMonth(S.date)), 7) : startOfWeek(S.date));
   let h = `<div class="toolbar"><div class="tb-left">
-      <h1><span>${periodLabel()}</span></h1>${S.view !== "month" ? `<span class="badge-w">S${wk}</span>` : ""}
+      <h1><span>${periodLabel()}</span></h1>${S.view !== "month" ? `<span class="badge-w">S${wk}</span>` : ""}<span class="tz-chip" title="Les heures sont affichées dans le fuseau de votre appareil (${esc(VIEW_TZ)})">Heure ${/^[AEÉIOU]/.test(tzName(VIEW_TZ)) ? "d'" : "de "}${esc(tzName(VIEW_TZ))}</span>
       <div class="arrows"><button class="sq-btn" id="prev" aria-label="Précédent">${I.left}</button><button class="sq-btn" id="next" aria-label="Suivant">${I.right}</button></div>
       <button class="text-btn" id="today">Aujourd'hui</button></div>
     <div class="tb-right">
@@ -2533,7 +2617,7 @@ async function migrate(){
     let nPerso = 0, nKids = 0;
     (old.events || []).forEach(e => {
       if(!e.date || typeof e.start !== "number" || typeof e.end !== "number" || e.end <= e.start) return;
-      const base = {date:e.date, start:e.start, end:e.end, note:e.note || "", cancelled:!!e.cancelled, recurrenceId:e.recurrenceId || null,
+      const base = {date:e.date, start:e.start, end:e.end, tz:DEFAULT_TZ, note:e.note || "", cancelled:!!e.cancelled, recurrenceId:e.recurrenceId || null,
         title:"", createdBy:me(), createdByName:S.user.name, createdAt:now};
       const id = store.newId();
       if(e.profile === "Moi"){
