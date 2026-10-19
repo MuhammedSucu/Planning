@@ -349,14 +349,18 @@
   .pr-t{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-family:var(--mono, ui-monospace, monospace);font-size:10px;line-height:1;color:color-mix(in srgb,var(--prayer) 60%,transparent);pointer-events:none;}
   .pr-tick[data-t]::after{content:attr(data-t);position:absolute;right:6px;top:2px;font-size:10px;line-height:1;color:color-mix(in srgb,var(--prayer) 60%,transparent);}
   /* Cours des enfants en fond : aplat très clair, juste le nom */
-  .ev.ghost:not(.prayer){background:#F4F4F7;outline:none;box-shadow:none;color:#A3A3AE;}
+  .ev.ghost:not(.prayer){background:rgba(96,96,120,.07);outline:none;box-shadow:none;color:#9B9BA8;}
   .ev.ghost:not(.prayer) .ev-t{font-weight:500;}
   .ev.ghost:not(.prayer) .ev-s, .ev.ghost:not(.prayer) .ev-h{display:none;}
   /* Rendez-vous qui chevauche un cours des enfants : semi-transparent, le cours se lit à travers (à droite) */
   .ev.main.overkid{background:color-mix(in srgb,var(--evbg) 50%,transparent);box-shadow:inset 2px 0 0 var(--evbar),inset 0 0 0 1px color-mix(in srgb,var(--evbar) 35%,transparent);}
-  .ev.ghost.under:not(.prayer){text-align:right;color:#6E6E7A;background:#ECECF1;}
+  .ev.ghost.under:not(.prayer){text-align:right;color:#6E6E7A;background:rgba(96,96,120,.11);}
   .tz-chip{font-size:11.5px;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:3px 9px;white-space:nowrap;}
   .ev-tz{opacity:.75;font-weight:400;}
+  .presrow{background:color-mix(in srgb,var(--accent, #5B47F0) 7%,#fff);border-bottom:1px solid var(--line);}
+  .presband{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent, #5B47F0);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line-soft);background:color-mix(in srgb,var(--accent, #5B47F0) 10%,transparent);}
+  .presband svg,.mpres svg{width:12px;height:12px;flex-shrink:0;}
+  .mpres{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--accent, #5B47F0);background:color-mix(in srgb,var(--accent, #5B47F0) 10%,transparent);border-radius:4px;padding:1px 5px;margin:1px 0 3px;white-space:nowrap;overflow:hidden;}
   .pr-band.busy-band{background:repeating-linear-gradient(135deg,var(--busy-a) 0 6px,var(--busy-b) 6px 12px);border-top:none;cursor:not-allowed;}
   .holrow{background:var(--hol-head);border-bottom:1px solid var(--line);}
   .holband{font-size:11px;font-weight:600;color:var(--hol-ink);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:1px solid var(--line-soft);}
@@ -522,6 +526,7 @@ const ROLE_LABELS = {owner:"Organisateur", parent:"Parent", teacher:"Professeur"
 const DEMO = new URLSearchParams(location.search).has("demo");
 
 const I = {
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>',
   cal:'<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   left:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>',
   right:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>',
@@ -794,7 +799,7 @@ const S = {
   showPerso:true, showSoc:true, showKids:true, allCats:false, query:"", searchFocus:false,
   loadedFrom:null, firstScroll:true, mig:undefined, data:{}
 };
-function resetData(){ S.data = {perso:[], enfants:[], societe:[], busy:[], holidays:[], catEnf:[], catPerso:[], members:[], settings:[]}; }
+function resetData(){ S.data = {perso:[], enfants:[], societe:[], busy:[], holidays:[], presence:[], catEnf:[], catPerso:[], members:[], settings:[]}; }
 resetData();
 
 const me = () => S.user.email;
@@ -819,6 +824,10 @@ const catList = cal => cal === "perso" ? S.data.catPerso : S.data.catEnf;
 const NOCAT = {bg:"#EFEBFF", text:"#6E56F2"};
 const catOf = (cal,id) => catList(cal).find(c => c.id === id) || {id:null, name:"Sans catégorie", ...(cal === "perso" ? NOCAT : GREY)};
 const holidayFor = di => S.data.holidays.find(h => di >= h.startDate && di <= h.endDate);
+/* Périodes « sur place » (visibles par les collaborateurs, dans votre planning et le planning partagé) */
+const showPresence = () => (S.tab === "perso" && (isOwner() || S.role === "parent")) || (S.tab === "societe" && S.role === "collab");
+const presenceFor = di => showPresence() ? (S.data.presence || []).find(h => di >= h.startDate && di <= h.endDate) : null;
+const presLabel = p => "Sur place" + (p.place ? " · " + p.place : "");
 const busyList = () => isOwner() ? S.data.perso.filter(e => !e.cancelled) : S.data.busy;
 const initial = n => (n || "?").trim().charAt(0).toUpperCase();
 
@@ -1058,9 +1067,9 @@ function tickNow(){
 setInterval(tickNow, 30000);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) tickNow(); });
 const onWatchError = err => { console.error(err); toast("Impossible de charger certaines données (accès refusé ou connexion).", "err"); };
-function watchInto(arr, coll, opt, key){
+function watchInto(arr, coll, opt, key, quiet){
   const conv = /^(ev_|busy$)/.test(coll);
-  arr.push(store.watch(coll, opt, list => { S.data[key] = conv ? list.map(toView) : list; scheduleRender(); }, onWatchError));
+  arr.push(store.watch(coll, opt, list => { S.data[key] = conv ? list.map(toView) : list; scheduleRender(); }, quiet ? (e => console.warn(coll, e)) : onWatchError));
 }
 function subscribeEvents(){
   unsubEvents.forEach(u => { try{ u(); }catch(e){} });
@@ -1079,6 +1088,7 @@ function subscribeAll(){
   }
   if(isOwner() || S.role === "parent") watchInto(unsubOther,"categories",{eq:["cal","perso"]},"catPerso");
   if(isOwner()) watchInto(unsubOther,"members",{},"members");
+  if(isOwner() || S.role === "collab" || S.role === "parent") watchInto(unsubOther,"presence",{},"presence", true);
   watchInto(unsubOther,"settings",{},"settings");
 }
 
@@ -1322,6 +1332,10 @@ function sidebarHtml(){
     }
     h += `</div>`;
   }
+  if(S.tab === "perso" && isOwner()){
+    const up = (S.data.presence || []).filter(x => x.endDate >= iso(todayDate())).length;
+    h += `<div class="side-sec"><div class="side-h">Gestion</div><button class="nav-item" id="manage-pres">${I.pin}<span class="grow">Sur place</span><span class="count">${up}</span></button></div>`;
+  }
   if(S.tab === "enfants" && kidsAdmin()){
     h += `<div class="side-sec"><div class="side-h">Gestion</div><button class="nav-item" id="manage-hol">${I.sun}<span class="grow">Vacances scolaires</span><span class="count">${S.data.holidays.length}</span></button></div>`;
   }
@@ -1357,6 +1371,7 @@ function bindSidebar(){
   const bind = (id, key, lsKey) => { const el = $(id); if(el) el.onchange = e => { S[key] = e.target.checked; ls.set(lsKey, S[key] ? "1" : "0"); renderApp(); }; };
   bind("chk-perso", "showPerso", "show-perso"); bind("chk-soc", "showSoc", "show-soc"); bind("chk-kids", "showKids", "showkids");
   const mh = $("manage-hol"); if(mh) mh.onclick = openHolidays;
+  const mp = $("manage-pres"); if(mp) mp.onclick = openPresence;
   const pon = $("pr-on"); if(pon) pon.onchange = () => savePrayer({...prayerCfg(), on: pon.checked});
   app.querySelectorAll("[data-city]").forEach(b => b.onclick = () => savePrayer({...prayerCfg(), city: b.dataset.city}));
   const pst = $("pr-set"); if(pst) pst.onclick = openPrayerSettings;
@@ -1529,8 +1544,20 @@ function renderTimeGrid(dates, items){
     if(h0) runs += `<div class="holband" style="grid-column:${i0 + 2} / span ${len}" title="${esc(h0.label)}">${esc(h0.label)}</div>`;
     i0 += len;
   }
-  if(runs) head = head.replace(`<div class="tg-head" style="grid-template-columns:${cols}"><div></div>`,
-    `<div class="tg-head" style="grid-template-columns:${cols}"><div class="holrow" style="grid-column:1 / -1;display:grid;grid-template-columns:${cols}"><div></div>${runs}</div><div></div>`);
+  // Sur place : bandeau violet au-dessus des jours concernés
+  let pruns = ""; i0 = 0;
+  while(i0 < n){
+    const p0 = presenceFor(iso(dates[i0]));
+    let len = 1;
+    while(i0 + len < n && p0 && presenceFor(iso(dates[i0 + len])) === p0) len++;
+    if(p0) pruns += `<div class="presband" style="grid-column:${i0 + 2} / span ${len}" title="${esc(presLabel(p0))}">${I.pin}${esc(presLabel(p0))}</div>`;
+    i0 += len;
+  }
+  let rows = "";
+  if(pruns) rows += `<div class="presrow" style="grid-column:1 / -1;display:grid;grid-template-columns:${cols}"><div></div>${pruns}</div>`;
+  if(runs) rows += `<div class="holrow" style="grid-column:1 / -1;display:grid;grid-template-columns:${cols}"><div></div>${runs}</div>`;
+  if(rows) head = head.replace(`<div class="tg-head" style="grid-template-columns:${cols}"><div></div>`,
+    `<div class="tg-head" style="grid-template-columns:${cols}">${rows}<div></div>`);
   head += `</div>`;
   const total = (END_HOUR - START_HOUR) * HOUR_PX;
   let body = `<div class="tg-body" style="grid-template-columns:${cols};height:${total}px"><div class="tg-gutter">`;
@@ -1590,6 +1617,8 @@ function renderMonthHtml(items){
     const list = items.main.filter(x => x.e.date === di && !x.dim).sort((a,b) => a.e.start - b.e.start);
     h += `<div class="md ${d.getMonth()!==first.getMonth()?"out":""} ${hol?"hol":""}" data-day="${di}" title="${hol?esc(hol.label):""}">
       <div class="mnum ${di===today?"today":""}">${d.getDate()}</div>`;
+    const pr = presenceFor(di);
+    if(pr) h += `<div class="mpres" title="${esc(presLabel(pr))}">${I.pin}${esc(presLabel(pr))}</div>`;
     list.slice(0,3).forEach(x => {
       h += `<div class="mchip ${x.e.cancelled?"cancelled":""}" data-cal="${x.cal}" data-id="${esc(x.e.id)}" style="${paintVars(x.color)}"><span class="t">${fmt(x.e.start)}</span>${esc(x.label)}</div>`;
     });
@@ -2438,6 +2467,36 @@ function openPrayerSettings(){
 /* =====================================================================
    VACANCES (parents)
    ===================================================================== */
+function openPresence(){
+  const list = (S.data.presence || []).slice().sort((a,b) => a.startDate < b.startDate ? -1 : 1);
+  const f = s => parse(s).toLocaleDateString("fr-FR",{day:"numeric", month:"short", year:"numeric"});
+  const last = list.length ? list[list.length - 1].place : "Istanbul";
+  openModal(`<h3>Sur place</h3><div class="when">Vos collaborateurs voient un bandeau « Sur place » au-dessus de ces jours.</div>
+    <div class="field"><label for="p-place">Où ?</label><input id="p-place" value="${esc(last || "")}" placeholder="ex. Istanbul, au bureau"></div>
+    <div class="row-2"><div class="field"><label for="p-start">Du</label><input type="date" id="p-start"></div><div class="field"><label for="p-end">Au</label><input type="date" id="p-end"></div></div>
+    <div class="actions" style="margin-top:0"><button class="btn btn-primary" id="p-add">Ajouter</button></div>
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:4px">
+      ${list.length ? list.map(h => `<div class="listrow"><span>${esc(presLabel(h))}<br><small>${f(h.startDate)} → ${f(h.endDate)}</small></span><button class="x-btn" data-pdel="${esc(h.id)}" aria-label="Supprimer">×</button></div>`).join("")
+        : `<p class="muted">Aucune période enregistrée.</p>`}</div>
+    <div class="actions"><button class="btn btn-secondary" data-close>Fermer</button></div>`);
+  $("p-start").onchange = () => { if(!$("p-end").value || $("p-end").value < $("p-start").value) $("p-end").value = $("p-start").value; };
+  $("p-add").onclick = () => {
+    const place = $("p-place").value.trim(), startDate = $("p-start").value, endDate = $("p-end").value;
+    if(!startDate || !endDate){ toast("Choisissez une date de début et de fin.", "err"); return; }
+    if(endDate < startDate){ toast("La date de fin doit être après la date de début.", "err"); return; }
+    const id = store.newId(), data = {place, startDate, endDate};
+    S.data.presence = (S.data.presence || []).concat([{id, ...data}]);
+    commit([{type:"set", coll:"presence", id, data}], "Période ajoutée.");
+    renderApp(); openPresence();
+  };
+  document.querySelectorAll("[data-pdel]").forEach(b => b.onclick = () => {
+    const h = S.data.presence.find(x => x.id === b.dataset.pdel);
+    S.data.presence = S.data.presence.filter(x => x.id !== h.id);
+    const {id, ...data} = h;
+    commit([{type:"delete", coll:"presence", id}], "Période supprimée.", {label:"Annuler", fn: () => commit([{type:"set", coll:"presence", id, data}], "C'est annulé.")});
+    renderApp(); openPresence();
+  });
+}
 function openHolidays(){
   const list = S.data.holidays.slice().sort((a,b) => a.startDate < b.startDate ? -1 : 1);
   const f = s => parse(s).toLocaleDateString("fr-FR",{day:"numeric", month:"short", year:"numeric"});
@@ -2678,6 +2737,7 @@ function seedDemo(){
   [["cp1","Rendez-vous",0],["cp2","Sport",3],["cp3","Travail",2]].forEach(([id,n,p]) => put("categories", id, {cal:"perso", name:n, ...PALETTE[p]}));
   put("settings","owner",{name:"Alex"});
   put("holidays","h1",{label:"Vacances de la Toussaint", startDate:"2026-10-17", endDate:"2026-11-01"});
+  put("presence","p1",{place:"Istanbul", startDate:D(1), endDate:D(3)});
   put("members","maman@demo.fr",{name:"Maman", role:"parent"});
   put("members","prof.anglais@demo.fr",{name:"Mme Martin (anglais)", role:"teacher"});
   put("members","prof.arabe@demo.fr",{name:"M. Haddad (arabe)", role:"teacher"});
